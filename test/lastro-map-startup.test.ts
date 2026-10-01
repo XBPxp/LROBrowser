@@ -108,9 +108,11 @@ function fixture(source: string, fail: 'card-prepare' | 'tools-append' | null = 
   context.KEYS ??= { SHIFT: false };
   context.Altitude ??= { width: 100, height: 100 };
   context.performance ??= performance;
+  const shoppingLifecycle = source.includes('function lastroCloseVendingShopping(')
+    ? functions(source, 'src/UI/Components/NpcStore/NpcStore.js', ['lastroCloseVendingShopping']) : '';
   vm.runInContext(region(source, 'src/Core/Configs.js') + '\ninit_Configs(); Configs.setServer(window.ROConfig.servers[0]);\n'
     + region(source, 'src/DB/Status/StatusProperty.js') + '\ninit_StatusProperty();\n'
-    + engine.replaceAll('import.meta.url', '"isolated-app://synthetic/runtime/Online.js"') + '\n' + registers
+    + shoppingLifecycle + '\n' + engine.replaceAll('import.meta.url', '"isolated-app://synthetic/runtime/Online.js"') + '\n' + registers
     + '\ninit_MapEngine();', context);
   return { context, timeline, hooks, components, session, connections, lifecycleFailure,
     start: () => vm.runInContext('MapEngine.init(0, 5121, "fixture.gat");', context),

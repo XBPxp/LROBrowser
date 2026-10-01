@@ -38,6 +38,10 @@ const hotkeyHelpers = hotkeys.statements.filter(node => ts.isFunctionDeclaration
 const begin = runtime.indexOf('const lastroNpcMapPreflight =');
 const installation = runtime.slice(begin, runtime.indexOf('NpcBox_default = UIManager.addComponent(NpcBox);', begin));
 if (begin < 0 || !installation.includes('lastroNpcMapTeleport')) throw new Error('Missing NPC map resource gate');
+// The final component registration also installs its scoped button fallback.
+// Execute that real dependency alongside the extracted map-link installation.
+const dialogButtonFallback = nodes(region(runtime, 'src/UI/Components/NpcBox/NpcBox.js'),
+  node => ts.isFunctionDeclaration(node) && node.name?.text === 'installLastroNpcDialogButtonFallback');
 const cleanups: Array<() => void> = [];
 
 interface NativeDialog {
@@ -123,6 +127,7 @@ function fixture(files = resources()) {
     }),
   };
   const api: NpcMapLinksApi = new Function('NpcBox', 'Thread', 'DB', 'MapRenderer', 'Configs', 'PACKET', 'Network', 'buildPrivateAirshipRequest', 'normalizeLastROTeleportMap', 'UIManager', 'console', 'describeLastroMapLoadFailure', 'setLastROInnerHTML', 'NpcMenu_default', 'InputBox_default', 'showLastroTeleportNotice', 'Mouse', 'SessionStorage_default', `
+    ${dialogButtonFallback}
     ${installation}
     return NpcBox._lastroMapLinks;
   `)(npc, { send: (type: string, input: { filename: string }, callback: (bytes: ArrayBuffer | null, error?: string) => void) => {

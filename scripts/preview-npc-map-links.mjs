@@ -9,8 +9,8 @@ const runtime = await readFile('generated/runtime/Online.js', 'utf8');
 const sourceHash = createHash('sha256').update(runtime).digest('hex');
 const source = ts.createSourceFile('Online.js', runtime, ts.ScriptTarget.Latest, true, ts.ScriptKind.JS);
 const wanted = new Set(['Common_default$1', 'NpcBox_default$1', 'NpcBox_default$2', 'WinPopup_default$1', 'WinPopup_default$2']);
-const values = {}, methods = {}, helpers = [];
-let installer, button, dataAttrs, draggable, promptMethod;
+const values = {}, methods = {}, helpers = [], hotkeyHelpers = [];
+let installer, button, dataAttrs, draggable, promptMethod, dialogFallback, closeAppear;
 const popupHelpers = [], keyMethods = [];
 function visit(node) {
   if (ts.isBinaryExpression(node)) {
@@ -20,9 +20,12 @@ function visit(node) {
     if (/^NpcBox\.(init|onRemove|onKeyDown|setText|addNext|addClose|next|close)$/.test(name) && ts.isFunctionExpression(node.right)) methods[name] = node.getText(source) + ';';
   }
   if (ts.isFunctionDeclaration(node) && ['lastroUiInputFrame', 'lastroUiLogicalPointer', 'lastroUiDragBounds'].includes(node.name?.text)) helpers.push(node.getText(source));
+  if (ts.isFunctionDeclaration(node) && ['lastroHotkeyId', 'lastroHotkeyComponentVisible', 'lastroHotkeyEditable'].includes(node.name?.text)) hotkeyHelpers.push(node.getText(source));
   if (ts.isFunctionDeclaration(node) && ['_popupPosition', '_createButton'].includes(node.name?.text)) popupHelpers.push(node.getText(source));
   if (ts.isMethodDeclaration(node) && node.name.getText(source) === 'showPromptBox') promptMethod = node.getText(source).replace(/^static\s+/, '');
   if ((ts.isFunctionExpression(node) || ts.isFunctionDeclaration(node)) && node.name?.text === 'installLastroNpcMapLinks') installer = node.getText(source);
+  if (ts.isFunctionDeclaration(node) && node.name?.text === 'installLastroNpcDialogButtonFallback') dialogFallback = node.getText(source);
+  if (ts.isFunctionDeclaration(node) && node.name?.text === 'onCloseAppear') closeAppear = node.getText(source);
   if (ts.isMethodDeclaration(node) && node.parent.name?.getText(source) === 'GUIComponent') {
     if (node.name.getText(source) === 'processDataAttrs') dataAttrs = node.getText(source);
     if (node.name.getText(source) === 'draggable') draggable = node.getText(source);
@@ -32,7 +35,7 @@ function visit(node) {
 }
 visit(source);
 for (const name of wanted) if (!values[name]) throw new Error('Missing generated NPC template: ' + name);
-if (!installer || !button || !dataAttrs || !draggable || !promptMethod || popupHelpers.length !== 2 || keyMethods.length !== 2 || Object.keys(methods).length !== 8)
+if (!installer || !button || !dataAttrs || !draggable || !promptMethod || !dialogFallback || !closeAppear || popupHelpers.length !== 2 || keyMethods.length !== 2 || hotkeyHelpers.length !== 3 || Object.keys(methods).length !== 8)
   throw new Error('Generate final runtime containing installLastroNpcMapLinks before running this preview');
 const regionStart = runtime.indexOf('//#region src/UI/Components/NpcBox/NpcBox.js');
 const regionEnd = runtime.indexOf('//#endregion', regionStart);
@@ -69,13 +72,25 @@ window.addEventListener('mousedown', event => { Mouse.screen.x = event.pageX; Mo
 const Renderer = { get width() { return innerWidth / zoom; }, get height() { return innerHeight / zoom; } };
 const _Renderer = Renderer, UI_default = { windowmagnet: false };
 const DB = { INTERFACE_PATH: '', getMessage: (_id, fallback = '') => fallback };
-const Client = { loadFile: (asset, done) => decodeBmp(asset).then(done).catch(assetError),
+const missingButtonArtwork = new URL(location.href).searchParams.get('button-artwork') === 'missing';
+const Client = { loadFile: (asset, done) => {
+  if (missingButtonArtwork && /^btn_(?:close|next)(?:_[ab])?\.bmp$/.test(asset)) return;
+  decodeBmp(asset).then(done).catch(assetError);
+},
   loadFiles: (assets, done) => Promise.all(assets.map(decodeBmp)).then(values => done?.(...values)).catch(assetError) };
 const _Client = Client, _DB = DB;
 const ItemInfo_default = { uid: null, append() {}, remove() {}, setItem() {} };
 const Navigation_default = { uid: null, show() {}, hide() {}, setNaviInfo() {} };
-const NpcMenu_default = { _host: null }, InputBox_default = { _host: null }, KEYS = { ENTER: 13, SPACE: 32, ESCAPE: 27 };
+const NpcMenu_default = { _host: null }, InputBox_default = { _host: null }, KEYS = {
+  ENTER: 13, SPACE: 32, ESCAPE: 27,
+  getDeepActiveElement() {
+    let active = document.activeElement;
+    while (active?.shadowRoot?.activeElement) active = active.shadowRoot.activeElement;
+    return active;
+  },
+};
 NATIVE_INPUT_HELPERS
+NATIVE_HOTKEY_HELPERS
 class GUIComponent {
   NATIVE_DATA_ATTRS
   constructor(name, css) { this.name = name; this._cssText = css; this.__active = false; this.magnet = {}; }
@@ -92,7 +107,7 @@ class GUIComponent {
       this._shadow.querySelectorAll('[data-background],[data-hover],[data-down],[data-active],[data-text],[data-preload]').forEach(GUIComponent.processDataAttrs);
       this.init(); this._host.remove();
     }
-    plane.append(this._host); this.__active = true; this._host.style.display = ''; this.focus(); this._bindKeyDown();
+    plane.append(this._host); this.__active = true; this._host.style.display = ''; this.onAppend?.(); this.focus(); this._bindKeyDown();
   }
   remove() { this.__active = false; this.onRemove?.(); this._unbindKeyDown(); this._host.remove(); report(); }
   focus() { this._host.style.zIndex = String(++topIndex); }
@@ -104,10 +119,14 @@ NATIVE_FORMATTERS
 NATIVE_POPUP_HELPERS
 const WinPopup = new GUIComponent('WinPopup', values.WinPopup_default$1);
 WinPopup.render = () => values.WinPopup_default$2;
-const UIManager = { getComponent: () => WinPopup, NATIVE_PROMPT_METHOD };
+const UIManager = { components: { NpcMenu: NpcMenu_default, InputBox: InputBox_default }, getComponent: () => WinPopup, NATIVE_PROMPT_METHOD };
 const NpcBox = new GUIComponent('NpcBox', values.NpcBox_default$1);
+UIManager.components.NpcBox = NpcBox;
 NpcBox.render = () => values.NpcBox_default$2; NpcBox.ownerID = 0;
 NATIVE_METHODS
+const NpcBox_default = NpcBox;
+NATIVE_CLOSE_APPEAR
+(NATIVE_DIALOG_FALLBACK)(NpcBox);
 const packets = [], closeRecords = [], errors = [], checks = [];
 let failMode = false, pendingVersion = 0, activePrompt = null;
 NpcBox.onClosePressed = gid => { closeRecords.push(gid); NpcBox.remove(); report(); };
@@ -133,12 +152,12 @@ NpcBox.onNextPressed = () => {};
     return true;
   },
 });
-const samples = ['^0000FF[MVP公告板]^000000', '巴风特：已死亡，复活剩余 1小时20分钟。',
+const samples = missingButtonArtwork ? ['[罗密欧]', '我会在外面等着你。'] : ['^0000FF[MVP公告板]^000000', '巴风特：已死亡，复活剩余 1小时20分钟。',
   '超魔导师凯瑟琳：存活（离线文本样本）。', '^nMapName^lhz_dun03'];
 function restore() {
   if (NpcBox.__active) NpcBox.remove();
   packets.length = closeRecords.length = errors.length = checks.length = 0;
-  NpcBox.append(); for (const text of samples) NpcBox.setText(text, 900001); NpcBox.addClose(900001); report();
+  NpcBox.append(); for (const text of samples) NpcBox.setText(text, 900001); onCloseAppear({ NAID: 900001 }); report();
 }
 function applyScale() {
   plane.style.zoom = String(zoom); plane.style.width = innerWidth / zoom + 'px'; plane.style.height = innerHeight / zoom + 'px';
@@ -175,9 +194,11 @@ await Promise.all(Object.keys(manifest).map(decodeBmp)); assetsReady = true; rep
 `;
 const replacements = { VALUES: JSON.stringify(values), MANIFEST: JSON.stringify(manifest), SOURCE_HASH: JSON.stringify(sourceHash), NATIVE_BMP: NATIVE_BMP_PREVIEW_SOURCE,
   NATIVE_INPUT_HELPERS: helpers.join('\n'), NATIVE_DATA_ATTRS: dataAttrs, NATIVE_DRAGGABLE: draggable, NATIVE_BUTTON: button,
-  NATIVE_FORMATTERS: formatters.join('\n'), NATIVE_METHODS: Object.values(methods).join('\n'), NATIVE_INSTALLER: installer };
+  NATIVE_HOTKEY_HELPERS: hotkeyHelpers.join('\n'),
+  NATIVE_FORMATTERS: formatters.join('\n'), NATIVE_METHODS: Object.values(methods).join('\n'), NATIVE_INSTALLER: installer,
+  NATIVE_DIALOG_FALLBACK: dialogFallback, NATIVE_CLOSE_APPEAR: closeAppear };
 Object.assign(replacements, { NATIVE_POPUP_HELPERS: popupHelpers.join('\n'), NATIVE_PROMPT_METHOD: promptMethod, NATIVE_KEY_METHODS: keyMethods.join('\n') });
-const js = fixture.replace(/\b(?:VALUES|MANIFEST|SOURCE_HASH|NATIVE_BMP|NATIVE_INPUT_HELPERS|NATIVE_DATA_ATTRS|NATIVE_DRAGGABLE|NATIVE_BUTTON|NATIVE_FORMATTERS|NATIVE_METHODS|NATIVE_INSTALLER|NATIVE_POPUP_HELPERS|NATIVE_PROMPT_METHOD|NATIVE_KEY_METHODS)\b/g, token => replacements[token]);
+const js = fixture.replace(/\b(?:VALUES|MANIFEST|SOURCE_HASH|NATIVE_BMP|NATIVE_INPUT_HELPERS|NATIVE_HOTKEY_HELPERS|NATIVE_DATA_ATTRS|NATIVE_DRAGGABLE|NATIVE_BUTTON|NATIVE_FORMATTERS|NATIVE_METHODS|NATIVE_INSTALLER|NATIVE_DIALOG_FALLBACK|NATIVE_CLOSE_APPEAR|NATIVE_POPUP_HELPERS|NATIVE_PROMPT_METHOD|NATIVE_KEY_METHODS)\b/g, token => replacements[token]);
 const syntax = ts.createSourceFile('npc-map-links-preview.mjs', js, ts.ScriptTarget.Latest, true, ts.ScriptKind.JS);
 if (syntax.parseDiagnostics.length) throw new Error('Invalid generated NPC fixture syntax');
 await writeFile('generated/npc-map-links-preview.mjs', js);
