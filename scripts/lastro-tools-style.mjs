@@ -56,5 +56,4 @@ button:focus-visible,input:focus-visible,select:focus-visible { outline:2px soli
 .lastro-custom-map-row { display:flex; flex-wrap:wrap; align-items:center; gap:4.5px; }.lastro-custom-map-row .lastro-line { flex:1; min-width:120px; }.lastro-custom-map-row .lastro-button { flex:none; }
 @media(max-width:480px) { :host{font-size:13px}.lastro-settings-view,.lastro-teleport-body{padding:6px;font-size:9.75px}.lastro-slot-grid{grid-template-columns:1fr}.lastro-tab{font-size:9px;line-height:14.625px}.lastro-route-tabs .lastro-tab{font-size:8.25px;line-height:14.625px}.lastro-route-row{gap:3.75px}.lastro-route-name{font-size:10.5px} }
 @container lastro-panel (max-width:450px) { .lastro-slot-grid{grid-template-columns:1fr}.lastro-route-actions{max-width:82.5px}.lastro-custom-coordinates{gap:6px}.lastro-custom-coordinates .lastro-line{grid-template-columns:minmax(0,33.75px) minmax(0,1fr)} }
-@media(prefers-reduced-motion:reduce) { .lastro-route-row,.lastro-route-row.is-dragging,.lastro-route-row.is-drag-moving { transition:none; }.lastro-route-row.is-dragging { transform:none; } }
 `;

@@ -685,15 +685,23 @@ describe('destination drag motion', () => {
     expect((f.storage.get('1') as { orders: Record<string, unknown> }).orders.npc).toBeUndefined(); expect(f.requestRoute).not.toHaveBeenCalled();
   });
 
-  it('keeps sorting available while suppressing FLIP and CSS motion for reduced-motion users', () => {
+  it.each([false, true])('keeps held-card movement and neighbor animation when reduced motion is %s', reducedMotion => {
     const original = Object.getOwnPropertyDescriptor(window, 'matchMedia');
     try {
-      Object.defineProperty(window, 'matchMedia', { configurable: true, value: vi.fn(() => ({ matches: true })) });
+      Object.defineProperty(window, 'matchMedia', { configurable: true, value: vi.fn(() => ({ matches: reducedMotion })) });
       const f = fixture(); f.api.showTeleport(); f.measureRows(); const motion = mockSortAnimations(f);
-      f.pointer(f.handle('a'), 'pointerdown', 20); f.pointer(f.list(), 'pointermove', 170); f.pointer(f.list(), 'pointerup', 170);
-      expect(f.ids()).toEqual(['b', 'c', 'a']); expect(f.saved).toHaveBeenCalledOnce(); expect(motion.animate).not.toHaveBeenCalled();
-      expect(window.matchMedia).toHaveBeenCalledWith('(prefers-reduced-motion: reduce)');
-      expect(toolsCss).toMatch(/@media\(prefers-reduced-motion:reduce\).*transition:none;.*transform:none;/);
+      const row = f.row('a');
+      f.pointer(f.handle('a'), 'pointerdown', 20); f.pointer(f.list(), 'pointermove', 170);
+      expect(row.classList.contains('is-drag-moving')).toBe(true);
+      expect(row.style.getPropertyValue('--lastro-sort-offset')).not.toBe('');
+      expect(f.ids()).toEqual(['b', 'c', 'a']); expect(f.saved).not.toHaveBeenCalled();
+      expect(motion.animate).toHaveBeenCalledTimes(2);
+      expect(toolsCss).not.toMatch(/@media\s*\(prefers-reduced-motion/);
+      f.pointer(f.list(), 'pointerup', 170);
+      motion.animations.forEach(animation => expect(animation.cancel).toHaveBeenCalledOnce());
+      expect(row.classList.contains('is-dragging')).toBe(false);
+      expect(row.style.getPropertyValue('--lastro-sort-offset')).toBe('');
+      expect(f.saved).toHaveBeenCalledOnce(); expect(f.requestRoute).not.toHaveBeenCalled();
     } finally {
       if (original) Object.defineProperty(window, 'matchMedia', original);
       else delete (window as { matchMedia?: typeof window.matchMedia }).matchMedia;

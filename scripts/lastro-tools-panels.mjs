@@ -314,7 +314,6 @@ export function installLastroToolsPanels(tools, deps, css, presetRoutes = {}) {
     for (const animation of sortAnimations.values()) animation.cancel?.();
     sortAnimations.clear();
   }
-  function reducedMotion() { return win.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches === true; }
   function routeLayoutTop(node) {
     const viewport = root.querySelector('.lastro-route-scroll');
     if (node.offsetParent === viewport) return viewport.getBoundingClientRect().top + (node.offsetTop - viewport.scrollTop) * drag.scaleY;
@@ -337,7 +336,6 @@ export function installLastroToolsPanels(tools, deps, css, presetRoutes = {}) {
     const positions = new Map(rows.map(row => [row, row.getBoundingClientRect().top]));
     cancelSortAnimations();
     list.insertBefore(drag.node, before || null);
-    if (reducedMotion()) return;
     for (const row of rows) {
       const offset = (positions.get(row) - row.getBoundingClientRect().top) / drag.scaleY;
       if (Math.abs(offset) < .5 || typeof row.animate !== 'function') continue;
