@@ -706,6 +706,7 @@ export function installLastroToolsPanels(tools, deps, css, presetRoutes = {}) {
     for (const option of [...options].reverse()) {
       const tab = option.dataset.option === 'autoLoot' ? 'pick' : option.dataset.option === 'autoPots' ? 'eat' : 'battle';
       const label = option.closest('label'); label.className = 'lastro-line'; option.classList.remove('lastro-switch');
+      if (option.dataset.option === 'autoLoot') label.replaceChildren(doc.createTextNode('自动拾取：'), option, doc.createTextNode('开启'));
       content.querySelector(`[data-tab-panel="${tab}"]`).prepend(label);
     }
     const battle = content.querySelector('[data-tab-panel="battle"]');

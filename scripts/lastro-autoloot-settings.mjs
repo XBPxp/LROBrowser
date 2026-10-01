@@ -1,6 +1,6 @@
 import ts from 'typescript';
 
-/** Keep the native autoloot cache in server units and clarify its display meaning. */
+/** Keep the native autoloot cache in server units and render the compact pickup row. */
 export function patchRuntimeAutolootSettings(source) {
   const marker = '//#region src/UI/Components/LastROTools/LastROTools.js';
   const start = source.indexOf(marker);
@@ -46,12 +46,14 @@ export function patchRuntimeAutolootSettings(source) {
   const literal = literals[0];
   const original = literal.getText(file);
   const labels = [
-    ['拾取概率：<span class="lt-controls">自动拾取概率为 ', '掉落率上限：<span class="lt-controls">'],
-    ['<span class="lt-unit">% 以下的物品</span>', '<span class="lt-unit">%</span>'],
-    ['输入百分比，发送时自动转换为万分比，例如 0.1% = 10。', '按物品掉落率筛选，50% 表示掉落率上限，并非拾取成功率。修改后移开输入焦点即可发送设置，无需重新开关自动捡物。'],
+    ['<div class="lastro-tab-panel" data-tab-panel="pick" hidden>\n<div class="lastro-group"><div class="lastro-group-title">拾取</div>', '<div class="lastro-tab-panel" data-tab-panel="pick" hidden>'],
+    ['<span class="lt-unit">% 以下的物品</span>', '<span class="lt-unit">%以下的物品。</span>'],
+    ['<p class="lastro-help">输入百分比，发送时自动转换为万分比，例如 0.1% = 10。</p>\n</div>', ''],
   ];
   let updatedTemplate = original;
-  for (const [before, after] of labels) {
+  const newline = original.includes('\r\n') ? '\r\n' : '\n';
+  for (const [originalBefore, originalAfter] of labels) {
+    const before = originalBefore.replaceAll('\n', newline), after = originalAfter.replaceAll('\n', newline);
     if (updatedTemplate.split(before).length !== 2) throw new Error('anchor:autoloot-settings:label');
     updatedTemplate = updatedTemplate.replace(before, after);
   }

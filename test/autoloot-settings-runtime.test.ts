@@ -128,12 +128,11 @@ describe('native autoloot drop-rate setting', () => {
     expect(f.sent).toHaveLength(1);
   });
 
-  it('describes a drop-rate filter and when the existing change handler submits it', () => {
+  it('renders the requested compact pickup wording without changing the input range', () => {
     const f = fixture(), panel = f.root.querySelector('[data-tab-panel="pick"]')!;
-    expect(panel.querySelector('label')!.textContent).toContain('掉落率上限：');
-    expect(panel.textContent).toContain('50% 表示掉落率上限，并非拾取成功率');
-    expect(panel.textContent).toContain('移开输入焦点即可发送设置，无需重新开关自动捡物');
-    expect(panel.textContent).not.toMatch(/万分比|拾取概率|自动拾取概率为/);
+    expect(panel.querySelector('label')!.textContent).toBe('拾取概率：自动拾取概率为 %以下的物品。');
+    expect(panel.querySelector('.lastro-group-title,.lastro-help')).toBeNull();
+    expect(f.root.querySelectorAll('[data-option="autoLoot"]')).toHaveLength(1);
     expect(f.field('autoloot').min).toBe('0'); expect(f.field('autoloot').max).toBe('100'); expect(f.field('autoloot').step).toBe('0.1');
   });
 

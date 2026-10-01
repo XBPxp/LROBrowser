@@ -244,7 +244,10 @@ tools.populateItemSelects = function () {
   }
 };
 tools.setAutomationOption = function (option, enabled) { this._settingState[option] = enabled; this.setStatus('已模拟设置 ' + option + '：' + (enabled ? '开启' : '关闭')); };
-tools.updateField = function (field, input) { this._settingState[field] = input.type === 'checkbox' ? input.checked : input.value; this.setStatus('已模拟修改 ' + field); };
+tools.updateField = function (field, input) {
+  this._settingState[field] = field === 'autoloot' ? Math.round(Number(input.value) * 100) : input.type === 'checkbox' ? input.checked : input.value;
+  this.setStatus('已模拟修改 ' + field);
+};
 tools.submitAssistSkill = function () {
   const root = this.getRoot(), skill = root.querySelector('[data-field="addiskillid"]');
   const level = root.querySelector('[data-field="addiskilllv"]'), enabled = root.querySelector('[data-field="addiskillop"]');

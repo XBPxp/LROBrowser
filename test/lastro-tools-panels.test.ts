@@ -948,6 +948,7 @@ describe('separate automation and teleport windows', () => {
   it.each([['autoAttack', 'battle'], ['autoFollow', 'battle'], ['autoLoot', 'pick'], ['autoPots', 'eat']])('keeps the original %s checkbox wired to its original server option', (option, panel) => {
     const f = fixture(); f.api.showAutomation();
     const input = f.tools.getRoot().querySelector<HTMLInputElement>(`[data-option="${option}"]`)!;
+    if (option === 'autoLoot') expect(input.closest('label')!.textContent).toBe('自动拾取：开启');
     expect(input.type).toBe('checkbox');
     expect(input.closest('[data-tab-panel]')?.getAttribute('data-tab-panel')).toBe(panel);
     input.checked = true; input.dispatchEvent(new Event('change', { bubbles: true }));
