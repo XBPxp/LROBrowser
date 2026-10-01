@@ -3,6 +3,7 @@ import vm from 'node:vm';
 import ts from 'typescript';
 import { describe, expect, it, vi } from 'vitest';
 import { patchRuntimeLastROItemLayouts } from '../scripts/lastro-network-security.mjs';
+import { patchRuntimeNetworkFramingRecovery } from '../scripts/lastro-network-receive-recovery.mjs';
 // @ts-expect-error The reviewed vendored protocol module has no declaration file.
 import * as nativeFraming from '../vendor/v2/lastro-packet-framing.mjs';
 // @ts-expect-error The reviewed vendored card module has no declaration file.
@@ -216,6 +217,50 @@ describe('real native LastRO network compatibility', () => {
       expect(h.decoded.map(packet => packet.id)).toEqual([0x0073]);
       expect(h.socket.close).not.toHaveBeenCalled(); expect(h.state.closed).toBe(false);
     }
+  });
+
+  it('discards a malformed variable frame without permanently disabling later TCP reads', () => {
+    // NOTIFY_PLAYERCHAT is registered and variable-length; a declared length below four is invalid.
+    const bad = frame(0x008e, 4);
+    new DataView(bad.buffer).setUint16(2, 3, true);
+    const baseline = runtime();
+    baseline.send(join(bad, frame(0x0073, 11)));
+    baseline.send(frame(0x0073, 11));
+    expect(baseline.decoded).toEqual([]);
+    expect(baseline.state.closed).toBe(true);
+
+    const h = runtime(patchRuntimeNetworkFramingRecovery(patched));
+    h.send(join(bad, frame(0x0073, 11)));
+    expect(h.decoded).toEqual([]); // Never guess a packet boundary inside the bad chunk.
+    expect(h.state.saveBuffer).toBeNull();
+    expect(h.state.closed).toBe(false);
+    h.send(frame(0x0073, 11));
+    expect(h.decoded.map(packet => packet.id)).toEqual([0x0073]);
+    expect(h.socket.close).not.toHaveBeenCalled();
+    h.context.clearReceiveState(h.socket);
+    h.send(frame(0x0073, 11));
+    expect(h.decoded.map(packet => packet.id)).toEqual([0x0073]);
+    expect(h.state.closed).toBe(true);
+  });
+
+  it('can receive subsequent valid frames after a registered opcode has no known frame length', () => {
+    const h = runtime(patchRuntimeNetworkFramingRecovery(patched));
+    // The fixture adds only the missing length contract; it still uses the real receiver.
+    h.context.Packets.list[0x7ffe] = { Struct: vi.fn(), callback: vi.fn() };
+    h.send(join(frame(0x7ffe, 2), frame(0x0073, 11)));
+    expect(h.decoded).toEqual([]);
+    expect(h.state.closed).toBe(false);
+    h.send(frame(0x0073, 11));
+    expect(h.decoded.map(packet => packet.id)).toEqual([0x0073]);
+    expect(h.socket.close).not.toHaveBeenCalled();
+  });
+
+  it('keeps receive recovery restricted to the reviewed framing discard branch', () => {
+    const source = patchRuntimeNetworkFramingRecovery(native);
+    expect(source.replace(/\r\n/g, '\n').replace('if (state) state.saveBuffer = null;\n    else _save_buffer = null;',
+      'if (state) clearReceiveState(ownerSocket);\n    else _save_buffer = null;')).toBe(native.replace(/\r\n/g, '\n'));
+    expect(patchRuntimeNetworkFramingRecovery('const unrelated = true;')).toBe('const unrelated = true;');
+    expect(() => patchRuntimeNetworkFramingRecovery(source)).toThrow('anchor:network-framing-recovery:receive-state');
   });
 
   it('decodes the actual character-to-map handoff and map-accept structures in one TCP chunk', () => {

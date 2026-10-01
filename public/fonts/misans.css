@@ -1,20 +1,39 @@
 @font-face {
   font-family: 'MiSans';
-  src: url('./MiSans-Regular.woff2') format('woff2');
+  src: url('/fonts/MiSans-VF.woff2') format('woff2');
   font-style: normal;
   font-weight: 400;
+  font-variation-settings: 'wght' 330;
   font-display: swap;
 }
 @font-face {
   font-family: 'MiSans';
-  src: url('./MiSans-Medium.woff2') format('woff2');
+  src: url('/fonts/MiSans-VF.woff2') format('woff2');
+  font-style: normal;
+  font-weight: 500;
+  font-variation-settings: 'wght' 380;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'MiSans';
+  src: url('/fonts/MiSans-VF.woff2') format('woff2');
+  font-style: normal;
+  font-weight: 700;
+  font-variation-settings: 'wght' 630;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'LastRO Glyph Fallback';
+  src: url('/fonts/LastROGlyphFallback-Medium.woff2') format('woff2');
   font-style: normal;
   font-weight: 500;
   font-display: swap;
 }
+
 @font-face {
-  font-family: 'MiSans';
-  src: url('./MiSans-Bold.woff2') format('woff2');
+  font-family: 'LastRO Glyph Fallback';
+  src: url('/fonts/LastROGlyphFallback-Bold.woff2') format('woff2');
   font-style: normal;
   font-weight: 700;
   font-display: swap;

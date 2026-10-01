@@ -119,7 +119,7 @@ class GUIComponent {
   prepare() {
     if (this.__loaded) return;
     this.__loaded = true; this._host = document.createElement('div'); this._host.id = this.name;
-    Object.assign(this._host.style, { position: 'absolute', color: '#000', fontSize: '12px', fontFamily: 'MiSans,Arial,sans-serif', zIndex: '50' });
+    Object.assign(this._host.style, { position: 'absolute', color: '#000', fontSize: '12px', fontFamily: 'MiSans,"LastRO Glyph Fallback",Arial,sans-serif', zIndex: '50' });
     this._shadow = this._host.attachShadow({ mode: 'open' });
     const style = document.createElement('style'); style.textContent = values.Common_default$1 + this.css;
     const container = document.createElement('div'); container.className = 'ui-component-root'; setLastROInnerHTML(container, this.render());
@@ -232,7 +232,7 @@ const replacements = {
 const code = browser.replace(/\b(?:VALUES|MANIFEST|PLACEHOLDERS|SOURCE_HASH|NATIVE_BMP|NATIVE_DATA_ATTRS|NATIVE_HELPERS|NATIVE_SCROLLBAR|NATIVE_ELEMENTS|NATIVE_INPUT|NATIVE_STORE)\b/g, key => replacements[key]);
 await writeFile('generated/store-scroll-preview.js', code);
 await writeFile('generated/store-scroll-preview.html', `<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>NPC 商店滚动离线验证</title>
-<link rel="stylesheet" href="/fonts/misans.css"><style>body{margin:0;padding:16px;background:#28363e;color:#e8f0f7;font:13px MiSans,Arial,sans-serif}h1{font-size:18px;margin:0 0 8px}header{position:relative;z-index:200}.controls{display:flex;gap:6px;flex-wrap:wrap}.controls button,.controls select{font:inherit}#assets{margin:8px 0;color:#c2d3de;font-size:11px}#stage{position:relative;width:950px;height:500px;border:1px solid #536b79;background:repeating-linear-gradient(45deg,#263b35,#263b35 15px,#2a4039 15px,#2a4039 30px);overflow:auto}#plane{position:relative;width:900px;height:470px;transform-origin:top left}#metrics{font:11px Consolas,monospace;white-space:pre-wrap;max-width:950px}</style>
+<link rel="stylesheet" href="/fonts/misans.css"><style>body{margin:0;padding:16px;background:#28363e;color:#e8f0f7;font:13px MiSans,"LastRO Glyph Fallback",Arial,sans-serif}h1{font-size:18px;margin:0 0 8px}header{position:relative;z-index:200}.controls{display:flex;gap:6px;flex-wrap:wrap}.controls button,.controls select{font:inherit}#assets{margin:8px 0;color:#c2d3de;font-size:11px}#stage{position:relative;width:950px;height:500px;border:1px solid #536b79;background:repeating-linear-gradient(45deg,#263b35,#263b35 15px,#2a4039 15px,#2a4039 30px);overflow:auto}#plane{position:relative;width:900px;height:470px;transform-origin:top left}#metrics{font:11px Consolas,monospace;white-space:pre-wrap;max-width:950px}</style>
 <header><h1>NPC 商店滚动离线验证</h1><div class="controls"><button data-scenario="initial">重置 30 件物品</button><button data-scenario="delete">滚到底后移出 26 行</button><button data-scenario="append">新增末行自动可见</button><button data-scenario="quantity">原生数量输入</button><button id="new-row">再移入一行</button><button id="remove-row">退回一行</button><button data-edge="1">下沿拖拽 1 秒</button><button data-edge="-1">上沿拖拽 1 秒</button><select id="zoom"><option value="1">100%</option><option value="1.5">150%</option></select></div><div id="assets"></div></header>
 <main id="stage"><div id="plane"></div></main><pre id="metrics"></pre><script type="module" src="./store-scroll-preview.js"></script></html>`);
 console.log('Preview: /generated/store-scroll-preview.html');

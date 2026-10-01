@@ -15,7 +15,7 @@ const originalAst = ts.createSourceFile('original.js', original, ts.ScriptTarget
 const patchedAst = ts.createSourceFile('patched.js', output, ts.ScriptTarget.Latest, true, ts.ScriptKind.JS);
 const stylesheet = readFileSync('src/styles.css', 'utf8');
 const fontCss = readFileSync('public/fonts/misans.css', 'utf8');
-const regularFamily = "Arial, 'Microsoft YaHei', 'MiSans', 'Source Han Sans CN', sans-serif";
+const regularFamily = "Arial, 'Microsoft YaHei', 'MiSans', 'LastRO Glyph Fallback', sans-serif";
 const partsCache = new WeakMap<ts.SourceFile, { common: string; init: string; scale: string; clamp: string; loader?: ts.FunctionDeclaration }>();
 function nativeParts(file: ts.SourceFile) {
   const cached = partsCache.get(file); if (cached) return cached;
@@ -93,18 +93,22 @@ function faces(css: string) {
   });
 }
 
-// Hashes were independently checked against the unmodified official MiSans ZIP.
-const officialFonts = [
-  { variant: 'Regular', weight: 400, bytes: 4858624, hash: 'd704c1a932c0bd7e8a071d276cd81c0ed0c9fecfa26ac234f4bed0559fe1cb2d' },
-  { variant: 'Medium', weight: 500, bytes: 4942368, hash: '44e28ca6c2f0ca79829f192831ef87b5eec7c464f5cfb7a83467f57bb6e58114' },
-  { variant: 'Bold', weight: 700, bytes: 5081104, hash: '1c5a7515b61bc82baaa2e2c2fdae2032479fb9a99e09d4d021dc17314fc5939b' },
+// Golden output hashes retain the full official MiSans character set and the
+// original Source Han characters absent from MiSans, rather than source-text subsets.
+const bundledFonts = [
+  { filename: 'MiSans-VF.woff2', family: 'MiSans VF', bytes: 11909340, glyphs: 29773, codePoints: 29571,
+    hash: 'eddd9e31a39261880aa91f0f0267325e755aaf4549bff0b6ab3cf675fef0d5c8' },
+  { filename: 'LastROGlyphFallback-Medium.woff2', family: 'LastRO Glyph Fallback', bytes: 226536, glyphs: 1916, codePoints: 1848,
+    hash: '54a61ccc7738bd94af2cf7e25ef2f83666e688abb2751b08c31b2d37341d25d7' },
+  { filename: 'LastROGlyphFallback-Bold.woff2', family: 'LastRO Glyph Fallback', bytes: 228688, glyphs: 1916, codePoints: 1848,
+    hash: '64be7dcddc4477d05cb4edf276b0f6247ec04bbaf0c3429c6904fedba5929595' },
 ];
 function fontTables(bytes: Buffer) {
   expect(bytes.toString('ascii', 0, 4)).toBe('wOF2');
-  expect(bytes.toString('ascii', 4, 8)).toBe('OTTO');
+  expect([0x00010000, 0x4f54544f]).toContain(bytes.readUInt32BE(4));
   expect(bytes.readUInt32BE(8)).toBe(bytes.length);
   expect(bytes.readUInt16BE(14)).toBe(0);
-  const tables = new Map<number, { start: number; length: number }>();
+  const tables = new Map<number, { start: number; length: number; transformed: boolean }>();
   let cursor = 48, total = 0;
   function length128() {
     let value = 0;
@@ -116,9 +120,14 @@ function fontTables(bytes: Buffer) {
   }
   for (let index = 0; index < bytes.readUInt16BE(12); index++) {
     const flags = bytes[cursor++]!, tag = flags & 63;
-    // These official CFF fonts have only standard, untransformed tables.
-    expect(flags >>> 6).toBe(0); expect(tag).not.toBe(63); expect([10, 11]).not.toContain(tag);
-    const length = length128(); tables.set(tag, { start: total, length }); total += length;
+    // The table stream stores transformed glyf bytes and an empty loca table.
+    // Metadata tables tested below remain readable without reconstructing outlines.
+    if (tag === 63) cursor += 4;
+    const version = flags >>> 6;
+    const transformed = [10, 11].includes(tag) ? version !== 3 : version !== 0;
+    const originalLength = length128(), length = transformed ? length128() : originalLength;
+    if (tag === 11 && transformed) expect(length).toBe(0);
+    tables.set(tag, { start: total, length, transformed }); total += length;
   }
   const compressed = bytes.readUInt32BE(20);
   expect(cursor + compressed).toBeLessThanOrEqual(bytes.length);
@@ -126,14 +135,15 @@ function fontTables(bytes: Buffer) {
   expect(data.length).toBe(total);
   return (tag: number) => {
     const table = tables.get(tag); if (!table) throw new Error('Missing font table ' + tag);
+    expect(table.transformed).toBe(false);
     return data.subarray(table.start, table.start + table.length);
   };
 }
-function fontNames(name: Buffer) {
+function fontNames(name: Buffer, ids = [1, 2, 16, 17]) {
   const values: string[] = [];
   for (let index = 0; index < name.readUInt16BE(2); index++) {
     const record = 6 + 12 * index, id = name.readUInt16BE(record + 6);
-    if (name.readUInt16BE(record) !== 3 || ![1, 2, 16, 17].includes(id)) continue;
+    if (name.readUInt16BE(record) !== 3 || !ids.includes(id)) continue;
     const start = name.readUInt16BE(4) + name.readUInt16BE(record + 10), length = name.readUInt16BE(record + 8);
     values.push(new TextDecoder('utf-16be').decode(name.subarray(start, start + length)));
   }
@@ -161,6 +171,33 @@ function glyphFor(cmap: Buffer, codePoint: number) {
     }
   }
   return 0;
+}
+
+function fontCodePoints(cmap: Buffer) {
+  const values = new Set<number>();
+  for (let index = 0; index < cmap.readUInt16BE(2); index++) {
+    const table = cmap.readUInt32BE(4 + 8 * index + 4), format = cmap.readUInt16BE(table);
+    if (format === 12) {
+      for (let group = 0; group < cmap.readUInt32BE(table + 12); group++) {
+        const record = table + 16 + group * 12, first = cmap.readUInt32BE(record), last = cmap.readUInt32BE(record + 4);
+        const firstGlyph = cmap.readUInt32BE(record + 8);
+        for (let point = first; point <= last; point++) if (firstGlyph + point - first) values.add(point);
+      }
+    } else if (format === 4) {
+      const segments = cmap.readUInt16BE(table + 6) / 2;
+      for (let segment = 0; segment < segments; segment++) {
+        const end = cmap.readUInt16BE(table + 14 + 2 * segment), start = cmap.readUInt16BE(table + 16 + 2 * segments + 2 * segment);
+        const delta = cmap.readInt16BE(table + 16 + 4 * segments + 2 * segment);
+        const rangePos = table + 16 + 6 * segments + 2 * segment, offset = cmap.readUInt16BE(rangePos);
+        for (let point = start; point <= end; point++) {
+          let glyph = offset ? cmap.readUInt16BE(rangePos + offset + 2 * (point - start)) : (point + delta) & 65535;
+          if (offset && glyph) glyph = (glyph + delta) & 65535;
+          if (glyph) values.add(point);
+        }
+      }
+    }
+  }
+  return values;
 }
 
 function deferred<T>() {
@@ -303,7 +340,7 @@ describe('native typography without changing RO layout', () => {
 
   it('uses regular tools body and route names with limited medium title emphasis', () => {
     const rules = declarations(toolsCss());
-    expect(rules.get(':host')?.font).toBe("400 14px/1.5 Arial,'Microsoft YaHei','MiSans','Source Han Sans CN',sans-serif");
+    expect(rules.get(':host')?.font).toBe("400 14px/1.5 Arial,'Microsoft YaHei','MiSans','LastRO Glyph Fallback',sans-serif");
     expect(rules.get('.lastro-route-name')?.['font-weight']).toBe('400');
     expect(rules.get('.lastro-ro-titlebar strong')?.['font-weight']).toBe('500');
     expect(rules.get('.lastro-group-title')?.['font-weight']).toBe('500');
@@ -344,32 +381,71 @@ describe('native typography without changing RO layout', () => {
   });
 });
 
-describe('bundled official Chinese fonts', () => {
-  it.each(officialFonts)('ships unmodified official $variant bytes with usable Chinese and Latin glyphs', font => {
-    const bytes = readFileSync(`public/fonts/MiSans-${font.variant}.woff2`);
+describe('compact Chinese fonts without reducing character coverage', () => {
+  const parsed = bundledFonts.map(font => fontTables(readFileSync(`public/fonts/${font.filename}`)));
+
+  it.each(bundledFonts)('ships stable $filename bytes with complete expected character coverage', font => {
+    const bytes = readFileSync(`public/fonts/${font.filename}`);
     expect(bytes.length).toBe(font.bytes);
     expect(createHash('sha256').update(bytes).digest('hex')).toBe(font.hash);
     const table = fontTables(bytes), names = fontNames(table(5));
-    expect(names).toContain('MiSans'); expect(names).toContain(font.variant);
-    for (const character of '聊天设置确定取消传送金币 ABC 0123456789') expect(glyphFor(table(0), character.codePointAt(0)!)).toBeGreaterThan(0);
+    expect(names).toContain(font.family);
+    expect(table(4).readUInt16BE(4)).toBe(font.glyphs);
+    expect(fontCodePoints(table(0)).size).toBe(font.codePoints);
   });
 
-  it('maps real Regular/Medium/Bold faces to 400/500/700 and retains honest fallback weights', () => {
-    const bundled = faces(fontCss); expect(bundled).toHaveLength(3);
-    for (const font of officialFonts) {
-      const face = bundled.find(item => item['font-weight'] === String(font.weight));
-      expect(face?.['font-family']).toBe("'MiSans'");
-      const url = face?.src?.match(/url\(['"]?([^)'"\s]+)/)?.[1];
-      expect(url).toBe(`./MiSans-${font.variant}.woff2`);
-      expect(readFileSync(resolve('public/fonts', url!)).length).toBe(font.bytes);
-      expect(face?.src).toContain("format('woff2')");
+  it('retains the full Chinese block, supplementary characters and both missing-glyph weights', () => {
+    const [miSans, medium, bold] = parsed.map(table => fontCodePoints(table(0)));
+    expect(bold).toEqual(medium);
+    const combined = new Set([...miSans!, ...medium!]);
+    expect(combined.size).toBe(31417);
+    expect([...miSans!].filter(point => point >= 0x4e00 && point <= 0x9fff)).toHaveLength(20976);
+    for (let point = 0x4e00; point <= 0x9fef; point++) if (!miSans!.has(point)) throw new Error('Missing Chinese character U+' + point.toString(16));
+    for (const character of '聊天设置确定取消传送金币 ABC 0123456789，。！？「」') {
+      expect(glyphFor(parsed[0]!(0), character.codePointAt(0)!)).toBeGreaterThan(0);
     }
+    for (const point of [0x21d4, 0x2200, 0x3106c]) {
+      expect(miSans!.has(point)).toBe(false);
+      expect(medium!.has(point)).toBe(true);
+      expect(bold!.has(point)).toBe(true);
+    }
+    expect(miSans!.has(0x2ce93)).toBe(true);
+  });
+
+  it('maps CSS weights to the real Regular, Medium and Bold variable font instances', () => {
+    const fvar = parsed[0]!(47), names = parsed[0]!(5);
+    expect(fvar.readUInt32BE(0)).toBe(0x00010000);
+    const axisOffset = fvar.readUInt16BE(4), axisCount = fvar.readUInt16BE(8), axisSize = fvar.readUInt16BE(10);
+    expect(axisCount).toBe(1);
+    expect(fvar.toString('ascii', axisOffset, axisOffset + 4)).toBe('wght');
+    expect([4, 8, 12].map(offset => fvar.readInt32BE(axisOffset + offset) / 65536)).toEqual([150, 330, 700]);
+    const instanceSize = fvar.readUInt16BE(14), instances = new Map<string, number>();
+    for (let index = 0; index < fvar.readUInt16BE(12); index++) {
+      const record = axisOffset + axisCount * axisSize + index * instanceSize;
+      for (const name of fontNames(names, [fvar.readUInt16BE(record)])) instances.set(name, fvar.readInt32BE(record + 4) / 65536);
+    }
+    const bundled = faces(fontCss), primary = bundled.filter(face => face['font-family'] === "'MiSans'");
+    expect(bundled).toHaveLength(5); expect(primary).toHaveLength(3);
+    for (const [weight, variant, coordinate] of [[400, 'Regular', 330], [500, 'Medium', 380], [700, 'Bold', 630]] as const) {
+      expect(instances.get(variant)).toBe(coordinate);
+      const face = primary.find(item => item['font-weight'] === String(weight));
+      const url = face?.src?.match(/url\(['"]?([^)'"\s]+)/)?.[1];
+      expect(url).toBe('/fonts/MiSans-VF.woff2');
+      expect(readFileSync(resolve('public', url!.slice(1))).length).toBe(bundledFonts[0]!.bytes);
+      expect(face?.src).toContain("format('woff2')");
+      expect(face?.['font-variation-settings']).toBe(`'wght' ${coordinate}`);
+    }
+    const fallback = bundled.filter(face => face['font-family'] === "'LastRO Glyph Fallback'");
+    expect(fallback.map(face => face['font-weight'])).toEqual(['500', '700']);
+    expect(fallback.map(face => face.src)).toEqual([
+      "url('/fonts/LastROGlyphFallback-Medium.woff2') format('woff2')",
+      "url('/fonts/LastROGlyphFallback-Bold.woff2') format('woff2')",
+    ]);
     expect(stylesheet.trimStart()).toMatch(/^@import url\('\/fonts\/misans\.css'\);/);
-    const fallback = faces(stylesheet);
-    expect(fallback.find(face => face.src?.includes('SourceHanSansCN-Medium.otf'))?.['font-weight']).toBe('500');
-    expect(fallback.find(face => face.src?.includes('SourceHanSansCN-Bold.otf'))?.['font-weight']).toBe('700');
+    expect(faces(stylesheet)).toEqual([]);
     expect(declarations(stylesheet).get(':root')?.['font-family']).toBe(regularFamily);
     expect(declarations(stylesheet).get(':root')?.['font-weight']).toBe('400');
+    expect(declarations(stylesheet).get(':root')?.['font-synthesis']).toBe('none');
   });
 });
 

@@ -36,6 +36,13 @@ export function patchRuntimeEquipmentCatalog(source) {
   patch('src/DB/Jobs/MountTable.js', region => replaceExact(region,
     '  MountTable[JobConst_default.CRUSADER_2ND] = JobConst_default.CRUSADER2_2ND;',
     '  // The native enum has no alternate Crusader IDs; do not create an undefined entry.'));
+  patch('src/DB/DBManager.js', region => replaceExact(region,
+    '            Object.assign(HatTable_default, json);',
+    `            // Some client Lua entries have no resource name. Keep the native
+            // mapping so an empty value cannot select the bare sex sprite.
+            for (const [id, resource] of Object.entries(json || {})) {
+              if (typeof resource === "string" && resource.trim()) HatTable_default[id] = resource;
+            }`));
   return output;
 }
 

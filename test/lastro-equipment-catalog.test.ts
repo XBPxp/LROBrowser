@@ -51,6 +51,73 @@ function load(source: string): Catalog {
       MountTable, AllMountTable, JobConst_default, WeaponType_default, WeaponTypeExpansion, WeaponName, WeaponTrail, ShieldTable_default});
   `) as Catalog;
 }
+function applyAccessoryNames(source: string, catalog: Catalog, names: Record<string, unknown> | null | undefined) {
+  const file = ts.createSourceFile('DB.js', region(source, 'src/DB/DBManager.js'), ts.ScriptTarget.Latest, true, ts.ScriptKind.JS);
+  const callbacks: string[] = [];
+  function visit(node: ts.Node) {
+    if (ts.isMethodDeclaration(node) && node.name.getText(file) === 'lazyInit') {
+      function findCallback(child: ts.Node) {
+        if (ts.isCallExpression(child) && child.expression.getText(file) === 'loadLuaTable' &&
+            ts.isStringLiteral(child.arguments[1]!) && child.arguments[1].text === 'AccNameTable' && child.arguments[2]) {
+          callbacks.push(child.arguments[2].getText(file));
+        }
+        ts.forEachChild(child, findCallback);
+      }
+      ts.forEachChild(node, findCallback);
+    }
+    ts.forEachChild(node, visit);
+  }
+  visit(file);
+  if (callbacks.length !== 1) throw new Error('Missing or duplicate native accessory Lua callback');
+  const apply = vm.runInNewContext('(' + callbacks[0] + ')', { HatTable_default: catalog.HatTable_default }) as (names: unknown) => void;
+  apply(names);
+}
+
+// These bundled Lua 5.1 chunks contain only top-level table assignments. Execute
+// their actual instructions so the regression follows the shipped ID/name pair.
+function bundledAccessoryNames(): Record<string, unknown> {
+  const globals: Record<string, unknown> = {};
+  function table(value: unknown) {
+    if (typeof value !== 'object' || value === null) throw new Error('Expected an accessory Lua table');
+    return value as Record<string, unknown>;
+  }
+  function key(value: unknown) {
+    if (typeof value !== 'string' && typeof value !== 'number') throw new Error('Invalid accessory Lua key');
+    return String(value);
+  }
+  for (const name of ['accessoryid', 'accname']) {
+    const data = fs.readFileSync(`vendor/core/data/luafiles514/lua files/datainfo/${name}.lub`);
+    if (!data.subarray(0, 12).equals(Buffer.from([0x1b, 0x4c, 0x75, 0x61, 0x51, 0, 1, 4, 4, 4, 8, 0]))) throw new Error('Unsupported accessory Lua format');
+    let offset = 12;
+    const integer = () => { const value = data.readUInt32LE(offset); offset += 4; return value; };
+    const string = () => { const length = integer(), start = offset; offset += length; return data.subarray(start, offset - 1).toString('latin1'); };
+    string(); integer(); integer(); offset += 4;
+    const instructions = Array.from({ length: integer() }, integer);
+    const constants: unknown[] = Array.from({ length: integer() }, () => {
+      const tag = data[offset++]!;
+      if (tag === 0) return null;
+      if (tag === 1) return Boolean(data[offset++]!);
+      if (tag === 3) { const value = data.readDoubleLE(offset); offset += 8; return value; }
+      if (tag === 4) return string();
+      throw new Error('Unsupported accessory Lua constant: ' + tag);
+    });
+    const registers: unknown[] = [], rk = (index: number) => index >= 256 ? constants[index - 256] : registers[index];
+    for (const instruction of instructions) {
+      const op = instruction & 63, a = instruction >>> 6 & 255, b = instruction >>> 23 & 511,
+        c = instruction >>> 14 & 511, bx = instruction >>> 14;
+      if (op === 0) registers[a] = registers[b];
+      else if (op === 1) registers[a] = constants[bx];
+      else if (op === 5) registers[a] = globals[key(constants[bx])];
+      else if (op === 6) registers[a] = table(registers[b])[key(rk(c))];
+      else if (op === 7) globals[key(constants[bx])] = registers[a];
+      else if (op === 9) table(registers[a])[key(rk(b))] = rk(c);
+      else if (op === 10) registers[a] = {};
+      else if (op === 30) break;
+      else throw new Error('Unsupported accessory Lua instruction: ' + op);
+    }
+  }
+  return table(globals.AccNameTable);
+}
 const catalog = load(patched);
 const numericKeys = (table: object) => Object.keys(table).filter(key => /^\d+$/.test(key)).map(Number);
 const jobs = numericKeys(catalog.JobNameTable), weaponJobs = numericKeys(catalog.WeaponJobTable);
@@ -173,8 +240,52 @@ describe('complete bundled equipment catalogs through native resource resolvers'
     }
   });
 
+  it('keeps the Justitia mantle resource when the real bundled Lua has an empty costume name', () => {
+    const names = bundledAccessoryNames();
+    expect(names[3169]).toBe('');
+    expect(Object.entries(names).filter(([, value]) => value === '')).toEqual([['3169', '']]);
+    const native = load(vendor), fixed = load(patched);
+    applyAccessoryNames(vendor, native, names);
+    applyAccessoryNames(patched, fixed, names);
+    expect(native.HatTable_default[3169]).toBe('');
+    expect(fixed.HatTable_default[3169]).toBe('_gucn088');
+    for (const sex of [0, 1]) {
+      expect(native.DB.getHatPath(3169, sex)).toBe(`data/sprite/¾Ç¼¼»ç¸®/${['¿©', '³²'][sex]}/${['¿©', '³²'][sex]}`);
+      expect(fixed.DB.getHatPath(3169, sex)).toBe(`data/sprite/¾Ç¼¼»ç¸®/${['¿©', '³²'][sex]}/${['¿©', '³²'][sex]}_gucn088`);
+    }
+  });
+
+  it('still accepts named Lua overrides and additions through the native database callback', () => {
+    const fixed = load(patched);
+    applyAccessoryNames(patched, fixed, { 3169: '_updated_mantle', 999999: 'C_Server_Costume' });
+    expect(fixed.HatTable_default[3169]).toBe('_updated_mantle');
+    expect(fixed.HatTable_default[999999]).toBe('C_Server_Costume');
+    for (const sex of [0, 1]) {
+      expect(fixed.DB.getHatPath(3169, sex)).toMatch(/_updated_mantle$/);
+      expect(fixed.DB.getHatPath(999999, sex)).toMatch(/C_Server_Costume$/);
+    }
+  });
+
+  it.each(['', ' \t\r\n ', null, undefined, 123, false])('ignores invalid Lua resource names (%j) for existing and new IDs', value => {
+    const fixed = load(patched);
+    applyAccessoryNames(patched, fixed, { 3169: value, 999999: value });
+    expect(fixed.HatTable_default[3169]).toBe('_gucn088');
+    expect(Object.hasOwn(fixed.HatTable_default, '999999')).toBe(false);
+    for (const sex of [0, 1]) {
+      expect(fixed.DB.getHatPath(3169, sex)).toMatch(/_gucn088$/);
+      expect(fixed.DB.getHatPath(999999, sex)).toBeNull();
+    }
+  });
+
+  it.each([null, undefined])('retains default resources when Lua returns no table (%j)', value => {
+    const fixed = load(patched), defaults = { ...fixed.HatTable_default };
+    expect(() => applyAccessoryNames(patched, fixed, value)).not.toThrow();
+    expect(fixed.HatTable_default).toEqual(defaults);
+  });
+
   it('fails closed if an upstream catalog changes the reviewed patch anchors', () => {
     expect(() => patchRuntimeEquipmentCatalog(patched)).toThrow('anchor:equipment-catalog');
     expect(() => patchRuntimeEquipmentCatalog(vendor.replace('WeaponType_default.WPCLASS_TWOHANDROD', 'WeaponType_default.TWOHANDROD'))).toThrow('anchor:equipment-catalog');
+    expect(() => patchRuntimeEquipmentCatalog(vendor.replace('Object.assign(HatTable_default, json);', 'Object.assign(HatTable_default, {});'))).toThrow('anchor:equipment');
   });
 });

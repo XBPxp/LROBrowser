@@ -6,7 +6,7 @@
 export const CARD_COLLECTION_UI_BUILD = "20260924-v2-card-page-copy-1";
 
 const cardCss = `
-:host { position: fixed !important; inset: 0 !important; width: 100vw !important; height: 100vh !important; z-index: 120 !important; pointer-events: none; font-family: 'Source Han Sans CN', sans-serif; }
+:host { position: fixed !important; inset: 0 !important; width: 100vw !important; height: 100vh !important; z-index: 120 !important; pointer-events: none; font-family: Arial, 'Microsoft YaHei', 'MiSans', 'LastRO Glyph Fallback', sans-serif; }
 .cc-backdrop { position: absolute; inset: 0; background: rgba(4,7,12,.62); pointer-events: auto; }
 .cc { position: absolute; inset: 0; margin: auto; pointer-events: auto; box-sizing: border-box; width: min(1120px, calc(100vw - 32px)); height: min(760px, calc(100vh - 32px)); display: flex; overflow: hidden; background: #1a212d; color: #e6ecf4; border: 1px solid rgba(148,168,196,.22); border-radius: 10px; box-shadow: 0 18px 50px rgba(0,0,0,.55); font-size: 13px; }
 .cc-rail { flex: 0 0 132px; display: flex; flex-direction: column; background: #161d28; border-right: 1px solid rgba(148,168,196,.12); }

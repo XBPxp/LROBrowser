@@ -34,7 +34,7 @@ export function patchRuntimeDialogTypography(source) {
   const render = renderers[0];
   let setBody = set.body.getText(file);
   setBody = replaceExact(setBody, 'const ctx = this.ctx;', 'const ctx = this.ctx;\n      const dialogDpr = window.devicePixelRatio || 1;');
-  setBody = replaceExact(setBody, 'ctx.font = "12px Arial";', 'ctx.font = \'400 12px Arial, "Microsoft YaHei", MiSans, "Source Han Sans CN", sans-serif\';', 2);
+  setBody = replaceExact(setBody, 'ctx.font = "12px Arial";', 'ctx.font = \'400 12px Arial, "Microsoft YaHei", MiSans, "LastRO Glyph Fallback", sans-serif\';', 2);
   // Measure and wrap in CSS pixels. Only the bitmap gets the higher resolution.
   setBody = replaceExact(setBody, 'ctx.canvas.width = 14 + width;', [
     'const dialogWidth = Math.ceil(14 + width);',

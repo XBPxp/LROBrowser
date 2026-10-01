@@ -65,7 +65,7 @@ export interface WorldMapDependencies {
   accountId?(): number;
   monsterPortrait?(id: number): Promise<string | null>;
   navigate?(mapid: string): unknown;
-  teleport?(mapid: string): void | boolean | Promise<void | boolean>;
+  teleport?(mapid: string, label?: string): void | boolean | Promise<void | boolean>;
   cancelTeleport?(): void;
 }
 export interface WorldMapRegion {

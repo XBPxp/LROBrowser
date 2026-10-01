@@ -11,7 +11,7 @@ if (!profile || profile.availability !== 'available') throw new Error('missing f
 
 async function nativeCacheRegions() {
   const native = await readFile(new URL('../vendor/v2/Online.js', import.meta.url), 'utf8');
-  return ['src/Core/MemoryItem.js', 'src/Core/MemoryManager.js'].map(name => {
+  return ['src/Core/MemoryItem.js', 'src/Core/MemoryManager.js', 'src/Core/Preferences.js'].map(name => {
     const start = native.indexOf('//#region ' + name), end = native.indexOf('//#endregion', start);
     if (start < 0 || end < start) throw new Error('Missing native cache region: ' + name);
     return native.slice(start, end + '//#endregion'.length);
@@ -38,16 +38,28 @@ describe('V2 runtime patch', () => {
     expect(patched).not.toContain('https://game.lastro.cn/ro/src/DB/logsTable.js');
     const installation = patched.slice(patched.indexOf('const lastroSendRouteTeleport ='), patched.indexOf('UIManager.addComponent(LastROTools)'));
     const ast = ts.createSourceFile('tools-install.js', installation, ts.ScriptTarget.Latest, true, ts.ScriptKind.JS);
-    let catalogSelector = '';
+    let catalogSelector = '', locationSelector = '';
     function findCatalog(node: ts.Node) {
       if (ts.isPropertyAssignment(node) && node.name.getText(ast) === 'getPresetRoutes') catalogSelector = node.initializer.getText(ast);
+      if (ts.isPropertyAssignment(node) && node.name.getText(ast) === 'getCurrentLocation') locationSelector = node.initializer.getText(ast);
       ts.forEachChild(node, findCatalog);
     }
     findCatalog(ast);
     const presets = JSON.parse(await readFile(new URL('../scripts/lastro-teleport-routes.json', import.meta.url), 'utf8'));
     const appCatalog = new Function('Configs', 'LastROTeleportPresets', `return (${catalogSelector})();`)({ get: (name: string) => name === 'clientVer' ? 5 : 6 }, presets);
     const kafra = Object.values(appCatalog.npc).find((row: unknown) => (row as { npc: string }).npc.startsWith('卡普拉'));
-    expect(kafra).toMatchObject({ outset: ['prontera', 116, 72], path: [['prontera', 149, 89]] });
+    expect(kafra).toMatchObject({ outset: ['prontera', 149, 89], path: [['prontera', 149, 89]] });
+    expect(Object.keys(appCatalog.custom)).toHaveLength(150);
+    expect(appCatalog.custom['upstream:guide:treasureHunt']).toMatchObject({ outset: ['pay_fild11', 125, 175] });
+    const unknownCatalog = new Function('Configs', 'LastROTeleportPresets', `return (${catalogSelector})();`)({ get: () => 999 }, presets);
+    expect(unknownCatalog).toEqual({});
+    const renderer = { currentMap: 'Prontera.gat', loading: false };
+    const session: { Entity?: { position: Float32Array } } = { Entity: { position: new Float32Array([156.9, 182.3, 0]) } };
+    const getLocation = () => new Function('MapRenderer', 'SessionStorage_default', 'normalizeLastROTeleportMap', `return (${locationSelector})();`)(renderer, session, (map: string) => map.toLowerCase().replace(/\.gat$/, ''));
+    expect(getLocation()).toEqual({ map: 'prontera', x: 156, y: 182 });
+    renderer.loading = true; expect(getLocation()).toBeUndefined();
+    renderer.loading = false; session.Entity!.position[0] = Number.NaN; expect(getLocation()).toBeUndefined();
+    delete session.Entity; expect(getLocation()).toBeUndefined();
   }, 20000);
   it('requires unambiguous chat-map integration anchors on upstream updates', () => {
     expect(() => patchRuntimeChatMapLinks('function requestChatMapTeleport(link) { return false; }')).toThrow('anchor:chat-map-links');
@@ -200,6 +212,7 @@ end`;
       'ChatBox.addText = function addText(text, override) { text = text.replace(/<ITEMLINK>.*?<\\/ITEMLINK>/gi, function(match) { return match; }); if (!override && /mapname/.test(text)) override = true; };',
       'function onMapClick(event, mapLink) { if (requestChatMapTeleport(mapLink)) { event.preventDefault(); event.stopImmediatePropagation(); } }',
       'UIManager.addComponent(LastROTools);',
+      'UIManager.addComponent(GraphicsOption);',
       'Navigation.waitForMapData = function waitForMapData(callback) { setTimeout(() => Navigation.waitForMapData(callback), 100); };',
       'Navigation.navigateTo = function navigateTo(options) { _finalTargetData = {map: options.endMap}; this.waitForMapData(function () { this.findPath(); }); };',
       'var MapRenderer = class MapRenderer { static setMap(mapname) { UIManager.removeComponents(); } };',
@@ -273,7 +286,7 @@ end`;
     });
     expect(transpiled.diagnostics ?? []).toEqual([]);
     expect(patched).toContain('globalThis.LastRODirectSocketFactory(host, port)');
-    expect(patched).toContain("font-family: Arial, 'Microsoft YaHei', 'MiSans', 'Source Han Sans CN', sans-serif");
+    expect(patched).toContain("font-family: Arial, 'Microsoft YaHei', 'MiSans', 'LastRO Glyph Fallback', sans-serif");
     expect(patched).toContain("font-family: 'MiSans', Arial, sans-serif");
     expect(patched).toContain('font-size: 12px');
     expect(patched).toContain('font-size-adjust: none');

@@ -7,6 +7,8 @@ import { setLastROInnerHTML } from '../src/runtime/lastro-trusted-dom.mjs';
 
 const panelsSource = readFileSync('scripts/lastro-tools-panels.mjs', 'utf8').replace('export function ', 'function ');
 const install = runInNewContext(`${panelsSource}\ninstallLastroToolsPanels;`);
+const toolsCssSource = readFileSync('scripts/lastro-tools-style.mjs', 'utf8').replace('export const ', 'const ');
+const toolsCss = runInNewContext(`${toolsCssSource}\nLASTRO_TOOLS_CSS;`) as string;
 const onlineSource = readFileSync('vendor/v2/Online.js', 'utf8');
 const sectionStart = onlineSource.indexOf('function patchLastROToolsTemplate()');
 const originalSource = onlineSource.slice(sectionStart, onlineSource.indexOf('//#endregion', sectionStart));
@@ -35,7 +37,8 @@ const originalViewport = { width: window.innerWidth, height: window.innerHeight 
 const originalGetComputedStyle = window.getComputedStyle.bind(window);
 const mountedTools: Array<{ remove: () => void }> = [];
 
-function fixture(options: { preferences?: unknown; storage?: Map<string, unknown>; catalogs?: Record<string, Catalog>; profile?: string; confirm?: boolean } = {}) {
+function fixture(options: { preferences?: unknown; storage?: Map<string, unknown>; catalogs?: Record<string, Catalog>; profile?: string; confirm?: boolean;
+  persist?: false | ((value: Record<string, unknown>, commit: () => void) => unknown); getCurrentLocation?: () => unknown } = {}) {
   const storage = options.storage ?? new Map<string, unknown>([['1', Object.hasOwn(options, 'preferences') ? options.preferences : { orders: {} }]]);
   let profile = options.profile ?? '1';
   const catalogs = options.catalogs ?? { '1': defaults() };
@@ -49,10 +52,15 @@ function fixture(options: { preferences?: unknown; storage?: Map<string, unknown
   });
   const cancelRoute = vi.fn(), routeMapChanged = vi.fn(), routeMapChanging = vi.fn(), cancelPendingRoute = vi.fn();
   const loadPreferences = vi.fn(() => {
+    const savedProfile = profile;
     const stored = storage.get(profile);
     if (!stored || typeof stored !== 'object') return stored;
     const value = JSON.parse(JSON.stringify(stored));
-    value.save = () => { storage.set(profile, JSON.parse(JSON.stringify(value))); saved(); };
+    if (options.persist !== false) value.save = function (this: Record<string, unknown>) {
+      const commit = () => { storage.set(savedProfile, JSON.parse(JSON.stringify(this))); saved(); };
+      if (options.persist) return options.persist(this, commit);
+      commit();
+    };
     return value;
   });
   vi.spyOn(window, 'requestAnimationFrame').mockImplementation(() => 1);
@@ -91,6 +99,7 @@ function fixture(options: { preferences?: unknown; storage?: Map<string, unknown
     setAutomationOption: vi.fn(), updateField: vi.fn(), submitAssistSkill: vi.fn(),
     minimizePanel: vi.fn(), hidePanel: vi.fn(), restorePanel: vi.fn(),
     runQuickRoute: vi.fn(),
+    setStatus: vi.fn(),
     onMapChanged: vi.fn(),
     ensurePanelOpener: (): HTMLElement | null => null,
   });
@@ -109,12 +118,14 @@ function fixture(options: { preferences?: unknown; storage?: Map<string, unknown
   const deps = {
     document, window, GUIComponent, UIManager, setHtml: setLastROInnerHTML, normalizeRoute, requestRoute, loadPreferences,
     getProfile: () => profile, getPresetRoutes: () => catalogs[profile] ?? {},
+    getCurrentLocation: options.getCurrentLocation,
     showPrompt: options.confirm ? showPrompt : undefined, cancelRoute, routeMapChanged, routeMapChanging, cancelPendingRoute,
   };
   const api = install(tools, deps, '') as {
     teleport: GUIComponent; showAutomation: () => void; showTeleport: () => void; select: (category: string) => void;
     ordered: (category: string) => string[];
     onMapChanging: () => void; cancelRoute: () => void;
+    deactivate: () => void; refreshEntry: () => void; requestCustomRoute: (route: Route) => void;
   };
   tools.append();
   mountedTools.push(tools);
@@ -187,11 +198,508 @@ afterEach(() => {
   }
 });
 
+function fillCustom(f: ReturnType<typeof fixture>, fields: Partial<Record<'name' | 'desc' | 'map' | 'x' | 'y', string>> = {}) {
+  const form = f.root().querySelector<HTMLFormElement>('[data-custom-form]')!;
+  if (form.hidden) f.root().querySelector<HTMLButtonElement>('[data-add-place]')!.click();
+  for (const [name, value] of Object.entries({ name: '我的地点', desc: '日后使用', map: 'prontera', x: '100', y: '184', ...fields })) {
+    (form.elements.namedItem(name) as HTMLInputElement).value = value;
+  }
+  return form;
+}
+
+type CustomPlace = { id: string; name: string; desc: string; map: string; x: number; y: number };
+const savedPlace = (fields: Partial<CustomPlace> = {}): CustomPlace => ({ id: 'place-1', name: '我的地点', desc: '日后使用', map: 'prontera', x: 100, y: 184, ...fields });
+const storedPlaces = (f: ReturnType<typeof fixture>, profile = '1') => (f.storage.get(profile) as { customPlaces?: { version: number; entries: CustomPlace[] } })?.customPlaces?.entries ?? [];
+
+describe('compact tools content', () => {
+  const declaration = (selector: string, property: string) => {
+    const start = toolsCss.indexOf(`${selector} {`);
+    if (start < 0) throw new Error(`Missing style ${selector}`);
+    const block = toolsCss.slice(start, toolsCss.indexOf('}', start));
+    const value = block.match(new RegExp(`(?:[;{]\\s*)${property.replaceAll('-', '\\-')}:([^;]+)`))?.[1]?.trim();
+    if (!value) throw new Error(`Missing ${selector} ${property}`);
+    return value;
+  };
+  it('shrinks controls and destination rows once and applies the requested 75 percent size to both sets of tabs', () => {
+    for (const [selector, property, original] of [
+      ['.lastro-settings-view,.lastro-teleport-body', 'font-size', 14], ['.lastro-button', 'font-size', 13],
+      ['.lastro-button', 'min-height', 27], ['.lastro-line', 'min-height', 31],
+      ['.lastro-tools input:not([type=checkbox]),.lastro-tools select', 'height', 24],
+      ['.lastro-tools input[type=checkbox]', 'width', 15], ['.lastro-route-row', 'min-height', 73],
+      ['.lastro-route-name', 'font-size', 15], ['.lastro-route-desc', 'font-size', 12], ['.lastro-route-go', 'min-width', 52],
+    ] as const) expect(parseFloat(declaration(selector, property))).toBe(original * .75);
+    expect(declaration('.lastro-tab', 'font-size')).toBe('10.5px');
+    expect(declaration('.lastro-tab', 'padding')).toBe('3.75px 2.25px');
+    expect(declaration('.lastro-tab', 'line-height')).toBe('15.75px');
+    expect(declaration('.lastro-tab', 'min-width')).toBe('31.5px');
+    expect(declaration('.lastro-tabs', 'gap')).toBe('2.25px');
+    expect(declaration('.lastro-tabs', 'padding')).toBe('0 0 5.25px');
+    expect(declaration('.lastro-tabs', 'margin')).toBe('0 0 6px');
+    expect(declaration('.lastro-route-tabs .lastro-tab', 'font-size')).toBe('9.75px');
+    expect(declaration('.lastro-route-tabs .lastro-tab', 'line-height')).toBe('15.75px');
+    expect(declaration('.lastro-route-tabs .lastro-tab', 'padding')).toBe('3.75px 1.5px');
+    expect(declaration('.lastro-route-tabs .lastro-tab', 'min-width')).toBe('31.5px');
+    expect(declaration('.lastro-route-tabs', 'padding')).toBe('0 0 5.25px');
+    expect(declaration('.lastro-route-tabs', 'margin')).toBe('0 0 6px');
+    expect(declaration('.lastro-route-tabs', 'gap')).toBe('.75px');
+    expect(declaration('.lastro-custom-group-tabs .lastro-tab', 'padding-inline')).toBe('3.75px');
+    expect(declaration('.lastro-custom-source-tabs', 'margin-bottom')).toBe('3.75px');
+  });
+  it('preserves window and scroll viewport geometry without scaling the entire component', () => {
+    expect(declaration(':host', 'width')).toBe('520px');
+    expect(declaration('.lastro-settings-body', 'height')).toBe('325px');
+    expect(declaration('.lastro-route-scroll', 'height')).toBe('280px');
+    expect(declaration('.lastro-ro-titlebar', 'height')).toBe('20px');
+    expect(declaration('.lastro-window-resize', 'width')).toBe('13px');
+    for (const selector of [':host', '.lastro-tools', '.ui-component-root']) {
+      const start = toolsCss.indexOf(`${selector} {`), block = toolsCss.slice(start, toolsCss.indexOf('}', start));
+      expect(block).not.toMatch(/\b(?:zoom|transform)\s*:/);
+    }
+    expect(toolsCss).not.toContain('lastro-route-pagination');
+  });
+});
+
+describe('saved custom destinations', () => {
+  const source = (f: ReturnType<typeof fixture>, id: string) => f.root().querySelector<HTMLButtonElement>(`[data-custom-source="${id}"]`)!.click();
+  const importedCustom = JSON.parse(readFileSync('scripts/lastro-teleport-routes.json', 'utf8')).upstreamCustomRoutes as Record<string, Route & { group?: string }>;
+  it('preserves the exact upstream source categories and optgroup labels and shows each complete group with all 150 entries accessible', () => {
+    const f = fixture({ catalogs: { '1': { ...defaults(), custom: importedCustom } }, preferences: { category: 'custom' } }); f.api.showTeleport();
+    expect([...f.root().querySelectorAll('[data-custom-source]')].map(tab => tab.textContent)).toEqual(['常用地点', '洞穴传送', '野外地图', '我的地点']);
+    expect(f.ids()).toEqual([]);
+    const found = new Set<string>();
+    for (const [id, labels] of [
+      ['guide', ['首都功能服务', '城市与交通枢纽', '各地室外商人', '任务NPC']],
+      ['train', ['经典地下城', '地区与扩展地下城', '高等级与剧情区域', '古城传送点']],
+      ['wild', []],
+    ] as const) {
+      source(f, id);
+      expect([...f.root().querySelectorAll('[data-custom-group]')].map(tab => tab.textContent)).toEqual([...labels]);
+      const groups = [...f.root().querySelectorAll<HTMLElement>('[data-custom-group]')].map(tab => tab.dataset.customGroup!);
+      for (const group of groups.length ? groups : [null]) {
+        if (group != null) f.root().querySelector<HTMLButtonElement>(`[data-custom-group="${group}"]`)!.click();
+        const expected = Object.entries(importedCustom).filter(([key, route]) => key.startsWith(`upstream:${id}:`) && (group == null || route.group === group)).map(([key]) => `preset:${key}`);
+        expect(f.ids()).toEqual(expected); f.ids().forEach(value => found.add(value!));
+        if (group === '经典地下城') expect(f.ids()).toHaveLength(28);
+        if (group === '城市与交通枢纽') expect(f.ids()).toHaveLength(22);
+        expect(f.root().querySelector('[data-page-next]')).toBeNull();
+      }
+    }
+    expect(found.size).toBe(150); expect([...found].sort()).toEqual(Object.keys(importedCustom).map(id => `preset:${id}`).sort());
+    expect(f.requestRoute).not.toHaveBeenCalled(); expect(f.saved).not.toHaveBeenCalled();
+  });
+
+  it('keeps other-group ordering intact during keyboard and pointer reordering in a complete group', () => {
+    const f = fixture({ catalogs: { '1': { ...defaults(), custom: importedCustom } }, preferences: { category: 'custom', orders: {} } }); f.api.showTeleport();
+    source(f, 'guide'); f.root().querySelector<HTMLButtonElement>('[data-custom-group="城市与交通枢纽"]')!.click();
+    const all = f.api.ordered('custom'), visible = f.ids() as string[];
+    expect(visible).toHaveLength(22);
+    f.key(visible[0]!, 'ArrowDown'); expect(f.ids().slice(0, 2)).toEqual([visible[1], visible[0]]);
+    const stored = (f.storage.get('1') as { orders: { custom: string[] } }).orders.custom;
+    expect(stored).toHaveLength(150); expect(stored.filter(id => !visible.includes(id))).toEqual(all.filter(id => !visible.includes(id)));
+    const last = visible.at(-1)!;
+    f.measureRows(); f.pointer(f.handle(last), 'pointerdown', 1280); f.pointer(f.list(), 'pointermove', 0); f.pointer(f.list(), 'pointerup', 0);
+    expect(f.ids().slice(0, 3)).toEqual([last, visible[1], visible[0]]);
+    expect((f.storage.get('1') as { orders: { custom: string[] } }).orders.custom.filter(id => !visible.includes(id))).toEqual(stored.filter(id => !visible.includes(id)));
+    expect(f.requestRoute).not.toHaveBeenCalled();
+  });
+
+  it('resets ordering only in the selected upstream group and preserves another group’s custom order', () => {
+    const all = Object.keys(importedCustom).map(id => `preset:${id}`);
+    const city = all.filter(id => importedCustom[id.slice(7)]?.group === '城市与交通枢纽'), wild = all.filter(id => id.startsWith('preset:upstream:wild:'));
+    const swap = (ids: string[], left: string, right: string) => ids.map(id => id === left ? right : id === right ? left : id);
+    const expected = swap(all, wild[0]!, wild[1]!), customOrder = swap(expected, city[0]!, city[1]!);
+    const f = fixture({ catalogs: { '1': { ...defaults(), custom: importedCustom } }, preferences: { category: 'custom', orders: { custom: customOrder } } }); f.api.showTeleport();
+    source(f, 'guide'); f.root().querySelector<HTMLButtonElement>('[data-custom-group="城市与交通枢纽"]')!.click();
+    expect(f.ids().slice(0, 2)).toEqual([city[1], city[0]]);
+    f.root().querySelector<HTMLButtonElement>('[data-reset-order]')!.click();
+    expect(f.ids().slice(0, 2)).toEqual([city[0], city[1]]);
+    expect((f.storage.get('1') as { orders: { custom: string[] } }).orders.custom).toEqual(expected);
+  });
+  it('shows imported and saved custom destinations in distinct source tabs without editing the presets', () => {
+    const custom = { 'place-1': route('上游额外 NPC', 'izlude') };
+    const f = fixture({ catalogs: { '1': { ...defaults(), custom } }, preferences: { category: 'custom', orders: {}, customPlaces: { version: 1, entries: [savedPlace()] } } });
+    f.api.showTeleport();
+    expect(f.ids()).toEqual(['user:place-1']);
+    expect(f.root().querySelector<HTMLElement>('.lastro-route-scroll')?.hidden).toBe(false);
+    expect(f.root().querySelector<HTMLFormElement>('[data-custom-form]')?.hidden).toBe(true);
+    expect(f.root().querySelector<HTMLElement>('[data-custom-toolbar]')?.hidden).toBe(false);
+    expect(f.row('user:place-1').querySelector('[data-edit-place]')).not.toBeNull();
+    expect(f.row('user:place-1').textContent).toContain('自定义 / 我的地点 · prontera 100,184');
+    source(f, 'other'); expect(f.ids()).toEqual(['preset:place-1']);
+    expect(f.row('preset:place-1').querySelector('[data-edit-place]')).toBeNull();
+    expect(f.row('preset:place-1').textContent).toContain('自定义 / 其他地点 · izlude 100,184');
+    expect(custom).toEqual({ 'place-1': route('上游额外 NPC', 'izlude') });
+    expect(f.requestRoute).not.toHaveBeenCalled();
+  });
+
+  const search = (f: ReturnType<typeof fixture>, query: string) => {
+    const input = f.root().querySelector<HTMLInputElement>('[data-search-routes]')!;
+    input.value = query; input.dispatchEvent(new Event('input', { bubbles: true }));
+  };
+  it('places search after custom and searches every category with source labels and safe go actions', () => {
+    const custom = { extra: { ...route('上游商人', 'izlude'), desc: '购买材料' } };
+    const f = fixture({ confirm: true, catalogs: { '1': { ...defaults(), custom } }, preferences: { category: 'search', customPlaces: { version: 1, entries: [savedPlace({ name: '我的秘密营地', map: 'secret_map' })] } } });
+    f.api.showTeleport();
+    expect([...f.root().querySelectorAll<HTMLElement>('[data-category]')].slice(-2).map(tab => tab.dataset.category)).toEqual(['custom', 'search']);
+    expect(f.root().querySelector<HTMLElement>('[data-search-toolbar]')?.hidden).toBe(false);
+    expect(f.root().querySelector<HTMLElement>('[data-custom-toolbar]')?.hidden).toBe(true);
+    for (const query of ['秘密营地', 'SECRET_MAP', '日后使用']) { search(f, query); expect(f.ids()).toEqual(['custom:user:place-1']); }
+    for (const query of ['上游商人', 'IZLUDE', '购买材料']) { search(f, query); expect(f.ids()).toEqual(['custom:preset:extra']); }
+    for (const query of ['100,184', '100 184']) { search(f, query); expect(f.ids()).toHaveLength(7); }
+    search(f, '练级地点'); expect(f.ids()).toEqual(['train:t']); expect(f.row('train:t').textContent).toContain('练级 · pay_fild01 100,184');
+    search(f, 'BOSS 地点'); expect(f.ids()).toEqual(['boss:boss']);
+    search(f, '地点甲'); expect(f.ids()).toEqual(['npc:a']); expect(f.row('npc:a').textContent).toContain('NPC · prontera 100,184');
+    expect(f.requestRoute).not.toHaveBeenCalled(); expect(f.saved).not.toHaveBeenCalled();
+    f.row('npc:a').querySelector<HTMLButtonElement>('.lastro-route-go')!.click(); expect(f.requestRoute).not.toHaveBeenCalled();
+    f.confirmations[0]!.yes(); expect(f.requestRoute).toHaveBeenCalledExactlyOnceWith(f.catalogs['1']!.npc!.a);
+  });
+
+  it('shows every matching search result in a single scroll list without dropping saved destinations', () => {
+    const custom = Object.fromEntries(Array.from({ length: 45 }, (_, index) => [`upstream:guide:entry-${index}`, { ...route(`共享上游地点 ${index}`), group: '首都功能服务' }]));
+    const f = fixture({ catalogs: { '1': { npc: { first: route('共享主分类') }, custom } },
+      preferences: { category: 'search', orders: {}, customPlaces: { version: 1, entries: [savedPlace({ name: '共享用户地点' })] } } });
+    f.api.showTeleport(); search(f, '共享');
+    expect(f.ids()).toHaveLength(47); expect(f.ids()[0]).toBe('npc:first');
+    expect(f.root().querySelector('[data-route-pagination]')).toBeNull();
+    expect(f.row('custom:preset:upstream:guide:entry-0').textContent).toContain('自定义 / 常用地点 / 首都功能服务');
+    const results = new Set(f.ids());
+    expect(results.size).toBe(47); expect(f.row('custom:user:place-1').querySelector('[data-edit-place]')).not.toBeNull();
+    expect(storedPlaces(f)).toEqual([savedPlace({ name: '共享用户地点' })]); expect(f.saved).not.toHaveBeenCalled();
+    search(f, '共享用户地点'); expect(f.ids()).toEqual(['custom:user:place-1']);
+    expect(f.root().querySelector('[data-route-pagination]')).toBeNull();
+  });
+
+  it('shows an empty search result and clears it without mutating stored records or their original order', () => {
+    const orders = { custom: ['user:place-2', 'preset:extra', 'user:place-1'] }, entries = [savedPlace(), savedPlace({ id: 'place-2', name: '第二个地点' })];
+    const f = fixture({ catalogs: { '1': { ...defaults(), custom: { extra: route('上游地点') } } }, preferences: { category: 'search', orders, customPlaces: { version: 1, entries } } });
+    f.api.showTeleport(); search(f, '不存在'); expect(f.ids()).toEqual([]);
+    expect(f.list().textContent).toContain('未找到匹配地点'); expect(f.root().querySelector('[data-search-results]')?.textContent).toBe('找到 0 个地点');
+    expect(f.root().querySelector<HTMLButtonElement>('[data-reset-order]')?.hidden).toBe(true);
+    f.root().querySelector<HTMLButtonElement>('[data-clear-route-search]')!.click();
+    expect(f.ids()).toEqual([]); expect(f.list().textContent).toContain('请输入名称');
+    expect(f.root().querySelector<HTMLInputElement>('[data-search-routes]')?.value).toBe('');
+    expect(storedPlaces(f)).toEqual(entries); expect((f.storage.get('1') as { orders: unknown }).orders).toEqual(orders);
+    expect(f.saved).not.toHaveBeenCalled();
+  });
+
+  it('never sorts search results and restores saved-place sorting in the custom page', () => {
+    const entries = [savedPlace(), savedPlace({ id: 'place-2', name: '第二个地点' })];
+    const f = fixture({ preferences: { category: 'search', orders: {}, customPlaces: { version: 1, entries } } }); f.api.showTeleport();
+    search(f, '我的'); expect(f.ids()).toEqual(['custom:user:place-1']);
+    expect((f.handle('custom:user:place-1') as HTMLButtonElement).disabled).toBe(true);
+    f.key('custom:user:place-1', 'ArrowDown'); f.measureRows();
+    f.pointer(f.handle('custom:user:place-1'), 'pointerdown', 10); f.pointer(f.list(), 'pointermove', 150); f.pointer(f.list(), 'pointerup', 150);
+    f.root().querySelector<HTMLButtonElement>('[data-reset-order]')!.click();
+    expect(f.saved).not.toHaveBeenCalled(); expect(storedPlaces(f)).toEqual(entries);
+    search(f, ''); f.api.select('custom'); f.saved.mockClear(); f.key('user:place-1', 'ArrowDown');
+    expect(f.ids()).toEqual(['user:place-2', 'user:place-1']);
+    expect((f.storage.get('1') as { orders: { custom: string[] } }).orders.custom).toEqual(['user:place-2', 'user:place-1']);
+    expect(storedPlaces(f)).toEqual(entries); expect(f.saved).toHaveBeenCalledOnce();
+  });
+
+  it('retains hidden destinations when editing a filtered result and recomputes results after saving its name', () => {
+    const entries = [savedPlace(), savedPlace({ id: 'place-2', name: '第二个地点' })];
+    const f = fixture({ preferences: { category: 'search', orders: {}, customPlaces: { version: 1, entries } } }); f.api.showTeleport(); search(f, '我的');
+    f.row('custom:user:place-1').querySelector<HTMLButtonElement>('[data-edit-place]')!.click();
+    fillCustom(f, { name: '新的名字' }); f.root().querySelector<HTMLButtonElement>('[data-save-place]')!.click();
+    expect(f.ids()).toEqual([]); expect(storedPlaces(f).map(place => place.name)).toEqual(['新的名字', '第二个地点']);
+    expect(f.root().querySelector<HTMLInputElement>('[data-search-routes]')?.value).toBe('我的');
+    search(f, '新的名字'); expect(f.ids()).toEqual(['custom:user:place-1']);
+    expect(f.storage.get('1')).not.toHaveProperty('searchQuery'); expect(f.requestRoute).not.toHaveBeenCalled();
+  });
+
+  it('keeps search temporary, does not filter other categories, and clears search after a server switch', () => {
+    const storage = new Map<string, unknown>([
+      ['1', { category: 'search', orders: {}, customPlaces: { version: 1, entries: [savedPlace()] } }],
+      ['2', { category: 'custom', orders: {}, customPlaces: { version: 1, entries: [savedPlace({ name: '二区地点' })] } }],
+    ]);
+    const f = fixture({ storage }); f.api.showTeleport(); search(f, '我的'); f.api.select('npc');
+    expect(f.ids()).toEqual(['a', 'b', 'c']); expect(f.root().querySelector<HTMLElement>('[data-custom-toolbar]')?.hidden).toBe(true);
+    expect(f.storage.get('1')).not.toHaveProperty('searchQuery');
+    f.setProfile('2'); f.api.showTeleport(); expect(f.ids()).toEqual(['user:place-1']);
+    expect(f.root().querySelector<HTMLInputElement>('[data-search-routes]')?.value).toBe('');
+    f.tools.remove(); const next = fixture({ storage, profile: '1' }); next.api.showTeleport(); next.api.select('custom');
+    expect(next.root().querySelector<HTMLInputElement>('[data-search-routes]')?.value).toBe(''); expect(next.ids()).toEqual(['user:place-1']);
+  });
+
+  it('saves a destination with normalized map and a default name across reopening and creating a new tools instance', () => {
+    const f = fixture(); f.api.showTeleport(); f.api.select('custom'); f.saved.mockClear();
+    fillCustom(f, { name: '', desc: '', map: 'PRONTERA.GAT', x: '0', y: '65535' });
+    f.root().querySelector<HTMLButtonElement>('[data-save-place]')!.click();
+    expect(storedPlaces(f)).toEqual([savedPlace({ name: 'prontera 0,65535', desc: '', x: 0, y: 65535 })]);
+    expect(f.saved).toHaveBeenCalledOnce(); expect(f.requestRoute).not.toHaveBeenCalled();
+    expect(f.root().querySelector('[role="status"]')?.textContent).toBe('自定义地点已保存');
+    f.api.teleport.remove(); f.api.showTeleport(); expect(f.ids()).toEqual(['user:place-1']);
+    f.tools.remove();
+    const next = fixture({ storage: f.storage }); next.api.showTeleport();
+    expect(next.ids()).toEqual(['user:place-1']);
+    expect(next.row('user:place-1').textContent).toContain('prontera 0,65535');
+    expect(next.requestRoute).not.toHaveBeenCalled();
+  });
+
+  it.each(['adding', 'editing', 'editing from search'])('reads current location while %s without changing the name or notes or automatically saving or teleporting', mode => {
+    const getCurrentLocation = vi.fn(() => ({ map: 'IZLUDE.GAT', x: 0, y: 65535 }));
+    const f = fixture({ getCurrentLocation, preferences: { category: mode === 'editing from search' ? 'search' : 'custom', orders: {}, customPlaces: { version: 1, entries: [savedPlace()] } } });
+    f.api.showTeleport();
+    if (mode === 'editing') f.row('user:place-1').querySelector<HTMLButtonElement>('[data-edit-place]')!.click();
+    else if (mode === 'editing from search') { search(f, '我的地点'); f.row('custom:user:place-1').querySelector<HTMLButtonElement>('[data-edit-place]')!.click(); }
+    const form = fillCustom(f, { name: '自定义名字', desc: '保留这段备注', map: 'payon', x: '12', y: '34' });
+    f.root().querySelector<HTMLButtonElement>('[data-read-current-location]')!.click();
+    expect(getCurrentLocation).toHaveBeenCalledOnce();
+    expect((form.elements.namedItem('name') as HTMLInputElement).value).toBe('自定义名字');
+    expect((form.elements.namedItem('desc') as HTMLInputElement).value).toBe('保留这段备注');
+    expect((form.elements.namedItem('map') as HTMLInputElement).value).toBe('izlude');
+    expect((form.elements.namedItem('x') as HTMLInputElement).value).toBe('0');
+    expect((form.elements.namedItem('y') as HTMLInputElement).value).toBe('65535');
+    expect(f.root().querySelector('[role="status"]')?.textContent).toBe('已读取当前位置：izlude 0,65535');
+    expect(storedPlaces(f)).toEqual([savedPlace()]); expect(f.saved).not.toHaveBeenCalled(); expect(f.requestRoute).not.toHaveBeenCalled();
+    form.querySelector<HTMLButtonElement>('[data-save-place]')!.click();
+    expect(storedPlaces(f)).toContainEqual(savedPlace({ id: mode === 'adding' ? 'place-2' : 'place-1', name: '自定义名字', desc: '保留这段备注', map: 'izlude', x: 0, y: 65535 }));
+    expect(f.requestRoute).not.toHaveBeenCalled();
+  });
+
+  it.each([undefined, null, { map: '../prontera', x: 10, y: 20 }, { map: 'map_name_too_long_17', x: 10, y: 20 },
+    { map: 'prontera', x: '10', y: 20 }, { map: 'prontera', x: 1.5, y: 20 }, { map: 'prontera', x: -1, y: 20 },
+    { map: 'prontera', x: 65536, y: 20 }, { map: 'prontera', x: 10, y: NaN }, { map: 'prontera', x: 10, y: Infinity }, { map: 'prontera', x: 10 }])('preserves every draft field when current location is unavailable or invalid: %j', location => {
+    const f = fixture({ getCurrentLocation: () => location, preferences: { category: 'custom', orders: {} } }); f.api.showTeleport();
+    const form = fillCustom(f, { name: '保持名称', desc: '保持备注', map: 'payon', x: '12', y: '34' });
+    const fields = () => Object.fromEntries(['name', 'desc', 'map', 'x', 'y'].map(name => [name, (form.elements.namedItem(name) as HTMLInputElement).value]));
+    const previous = fields(); f.root().querySelector<HTMLButtonElement>('[data-read-current-location]')!.click();
+    expect(fields()).toEqual(previous); expect(f.root().querySelector('[role="status"]')?.textContent).toBe('角色或地图尚未就绪，无法读取当前位置，请稍后重试。');
+    expect(f.saved).not.toHaveBeenCalled(); expect(f.requestRoute).not.toHaveBeenCalled();
+  });
+
+  it('handles a missing or throwing location service without clearing draft coordinates', () => {
+    for (const getCurrentLocation of [undefined, () => { throw new Error('Map is loading'); }]) {
+      const f = fixture({ getCurrentLocation, preferences: { category: 'custom', orders: {} } }); f.api.showTeleport();
+      const form = fillCustom(f); f.root().querySelector<HTMLButtonElement>('[data-read-current-location]')!.click();
+      expect((form.elements.namedItem('map') as HTMLInputElement).value).toBe('prontera');
+      expect((form.elements.namedItem('x') as HTMLInputElement).value).toBe('100');
+      expect((form.elements.namedItem('y') as HTMLInputElement).value).toBe('184');
+      expect(f.root().querySelector('[role="status"]')?.textContent).toContain('角色或地图尚未就绪');
+      expect(f.saved).not.toHaveBeenCalled(); expect(f.requestRoute).not.toHaveBeenCalled(); f.tools.remove();
+    }
+  });
+
+  it('keeps saving separate from teleporting and reuses the checked route request only after a go confirmation', () => {
+    const f = fixture({ confirm: true }); f.api.showTeleport(); f.api.select('custom');
+    fillCustom(f); f.root().querySelector<HTMLButtonElement>('[data-save-place]')!.click();
+    expect(f.requestRoute).not.toHaveBeenCalled(); expect(f.showPrompt).not.toHaveBeenCalled();
+    f.row('user:place-1').querySelector<HTMLButtonElement>('.lastro-route-go')!.click();
+    expect(f.requestRoute).not.toHaveBeenCalled(); f.confirmations[0]!.yes();
+    expect(f.requestRoute).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ npc: '我的地点', outset: ['prontera', 100, 184], path: [['prontera', 100, 184]] }));
+  });
+
+  it('edits and deletes saved destinations without changing presets, route ordering, or window geometry', () => {
+    const geometry = { teleport: { width: 480, height: 420, x: 20, y: 30 } }, orders = { npc: ['c', 'a', 'b'], custom: ['user:place-1', 'preset:extra'] };
+    const f = fixture({ confirm: true, catalogs: { '1': { ...defaults(), custom: { extra: route('上游入口') } } },
+      preferences: { category: 'custom', orders, geometry, customPlaces: { version: 1, entries: [savedPlace()] } } });
+    f.api.showTeleport(); f.row('user:place-1').querySelector<HTMLButtonElement>('[data-edit-place]')!.click();
+    const form = f.root().querySelector<HTMLFormElement>('[data-custom-form]')!;
+    expect((form.elements.namedItem('map') as HTMLInputElement).value).toBe('prontera');
+    expect(form.querySelector('[data-save-place]')?.textContent).toBe('保存修改');
+    fillCustom(f, { name: '修改后的地点', map: 'izlude', x: '5', y: '6' });
+    form.querySelector<HTMLButtonElement>('[data-save-place]')!.click();
+    expect(storedPlaces(f)).toEqual([savedPlace({ name: '修改后的地点', map: 'izlude', x: 5, y: 6 })]);
+    expect(f.ids()).toEqual(['user:place-1']);
+    const stored = f.storage.get('1') as { orders: unknown; geometry: unknown };
+    expect(stored.orders).toEqual(orders); expect(stored.geometry).toEqual(geometry);
+    f.row('user:place-1').querySelector<HTMLButtonElement>('[data-delete-place]')!.click();
+    expect(f.showPrompt).toHaveBeenCalledWith('是否删除自定义地点“修改后的地点”？', expect.any(Function), expect.any(Function));
+    f.confirmations[0]!.no(); expect(storedPlaces(f)).toHaveLength(1);
+    f.row('user:place-1').querySelector<HTMLButtonElement>('[data-delete-place]')!.click(); f.confirmations[1]!.yes();
+    expect(storedPlaces(f)).toEqual([]); expect(f.ids()).toEqual([]); source(f, 'other'); expect(f.ids()).toEqual(['preset:extra']);
+    expect((f.storage.get('1') as { orders: unknown; geometry: unknown }).orders).toEqual(orders);
+    expect((f.storage.get('1') as { geometry: unknown }).geometry).toEqual(geometry);
+    expect(f.requestRoute).not.toHaveBeenCalled();
+  });
+
+  it('cancels editing without modifying storage and does not reuse an edit draft after closing', () => {
+    const f = fixture({ preferences: { category: 'custom', orders: {}, customPlaces: { version: 1, entries: [savedPlace()] } } }); f.api.showTeleport();
+    f.row('user:place-1').querySelector<HTMLButtonElement>('[data-edit-place]')!.click(); fillCustom(f, { name: '未保存' });
+    f.root().querySelector<HTMLButtonElement>('[data-cancel-edit]')!.click();
+    expect(storedPlaces(f)).toEqual([savedPlace()]); expect(f.saved).not.toHaveBeenCalled();
+    f.row('user:place-1').querySelector<HTMLButtonElement>('[data-edit-place]')!.click();
+    f.api.teleport.remove(); f.api.showTeleport();
+    expect((f.root().querySelector<HTMLFormElement>('[data-custom-form]')!.elements.namedItem('name') as HTMLInputElement).value).toBe('');
+    expect(f.root().querySelector('[data-save-place]')?.textContent).toBe('保存地点');
+  });
+
+  it('isolates saved custom destinations and pending deletes by server profile', () => {
+    const storage = new Map<string, unknown>([
+      ['1', { category: 'custom', orders: {}, customPlaces: { version: 1, entries: [savedPlace({ name: '一区地点' })] } }],
+      ['2', { category: 'custom', orders: {}, customPlaces: { version: 1, entries: [savedPlace({ name: '二区地点', map: 'izlude' })] } }],
+    ]);
+    const f = fixture({ storage, confirm: true }); f.api.showTeleport();
+    f.row('user:place-1').querySelector<HTMLButtonElement>('[data-delete-place]')!.click();
+    f.setProfile('2'); f.api.showTeleport(); f.confirmations[0]!.yes();
+    expect(f.row('user:place-1').textContent).toContain('二区地点');
+    expect(storedPlaces(f, '1')[0]?.name).toBe('一区地点'); expect(storedPlaces(f, '2')[0]?.name).toBe('二区地点');
+    fillCustom(f, { name: '二区新增' }); f.root().querySelector<HTMLButtonElement>('[data-save-place]')!.click();
+    expect(storedPlaces(f, '2').map(place => place.name)).toEqual(['二区地点', '二区新增']);
+    f.setProfile('1'); f.api.showTeleport(); expect(f.ids()).toEqual(['user:place-1']);
+    expect(f.root().textContent).not.toContain('二区地点'); expect(f.requestRoute).not.toHaveBeenCalled();
+  });
+
+  it.each([{ map: '../prontera' }, { map: 'prontera.gat?x=1' }, { x: '-1' }, { x: '65536' }, { y: '1.5' }, { y: '' }, { name: 'x'.repeat(81) }, { desc: 'x'.repeat(201) }])('rejects an invalid custom destination before saving or requesting a route: %j', fields => {
+    const f = fixture(); f.api.showTeleport(); f.api.select('custom'); f.saved.mockClear();
+    const form = fillCustom(f, fields); f.root().querySelector<HTMLButtonElement>('[data-save-place]')!.click();
+    form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+    expect(f.saved).not.toHaveBeenCalled(); expect(f.requestRoute).not.toHaveBeenCalled(); expect(storedPlaces(f)).toEqual([]);
+    expect(f.root().querySelector('[role="status"]')?.textContent).not.toContain('已保存');
+  });
+
+  it('renders saved names and notes as text and ignores executable fields in stored data', () => {
+    const name = '<img src=x onerror=alert(1)>', desc = '<script>alert(1)</script>';
+    const entry = { ...savedPlace({ name, desc }), path: [['malicious', 1, 2]], html: '<iframe>' };
+    const f = fixture({ preferences: { category: 'custom', customPlaces: { version: 1, entries: [entry] } } }); f.api.showTeleport();
+    expect(f.row('user:place-1').textContent).toContain(name); expect(f.row('user:place-1').textContent).toContain(desc);
+    expect(f.root().querySelector('img,script,iframe')).toBeNull();
+    f.row('user:place-1').querySelector<HTMLButtonElement>('.lastro-route-go')!.click();
+    expect(f.requestRoute).toHaveBeenCalledWith(expect.objectContaining({ outset: ['prontera', 100, 184], path: [['prontera', 100, 184]] }));
+  });
+
+  it.each([undefined, null, 'broken', [], { version: 9, entries: [savedPlace()] }, { version: 1, entries: {} }])('recovers legacy or malformed custom preferences without losing presets: %j', customPlaces => {
+    const f = fixture({ catalogs: { '1': { ...defaults(), custom: { extra: route('上游入口') } } }, preferences: { category: 'custom', customPlaces } });
+    expect(() => f.api.showTeleport()).not.toThrow(); source(f, 'other'); expect(f.ids()).toEqual(['preset:extra']);
+    fillCustom(f); f.root().querySelector<HTMLButtonElement>('[data-save-place]')!.click();
+    expect(storedPlaces(f)).toEqual([savedPlace()]); expect(f.requestRoute).not.toHaveBeenCalled();
+  });
+
+  it('ignores malformed and duplicate stored records while preserving valid destinations', () => {
+    const entries = [null, savedPlace({ id: '../bad' }), savedPlace({ map: '../bad' }), savedPlace({ x: -1 }), savedPlace({ y: 1.5 }),
+      { ...savedPlace(), name: {} }, savedPlace(), savedPlace({ name: '重复 id' }), savedPlace({ id: 'place-2', map: 'izlude' })];
+    const f = fixture({ preferences: { category: 'custom', customPlaces: { version: 1, entries } } }); f.api.showTeleport();
+    expect(f.ids()).toEqual(['user:place-1', 'user:place-2']); expect(f.root().textContent).not.toContain('重复 id');
+    expect(f.requestRoute).not.toHaveBeenCalled();
+  });
+
+  it('does not claim or retain a successful save when native storage throws, and supports retry', () => {
+    let failing = true;
+    const f = fixture({ preferences: { category: 'custom', orders: { npc: ['b', 'a'] }, geometry: { teleport: { width: 520 } }, _key: 'profile-key' },
+      persist(value, commit) { if (failing) { delete value.save; delete value._key; throw new Error('Quota exceeded'); } commit(); } });
+    f.api.showTeleport(); fillCustom(f); f.root().querySelector<HTMLButtonElement>('[data-save-place]')!.click();
+    expect(storedPlaces(f)).toEqual([]); expect(f.ids()).toEqual([]); expect(f.saved).not.toHaveBeenCalled();
+    expect(f.root().querySelector('[role="status"]')?.textContent).toBe('本地保存失败，地点未保存，请重试。');
+    failing = false; f.root().querySelector<HTMLButtonElement>('[data-save-place]')!.click();
+    expect(storedPlaces(f)).toEqual([savedPlace()]); expect(f.saved).toHaveBeenCalledOnce();
+    expect(f.storage.get('1')).toMatchObject({ _key: 'profile-key', orders: { npc: ['b', 'a'] }, geometry: { teleport: { width: 520 } } });
+    expect(f.requestRoute).not.toHaveBeenCalled();
+  });
+
+  it('does not discard an existing destination when a delete cannot be saved', () => {
+    const f = fixture({ confirm: true, preferences: { category: 'custom', customPlaces: { version: 1, entries: [savedPlace()] } }, persist() { throw new Error('Blocked storage'); } });
+    f.api.showTeleport(); f.row('user:place-1').querySelector<HTMLButtonElement>('[data-delete-place]')!.click(); f.confirmations[0]!.yes();
+    expect(f.ids()).toEqual(['user:place-1']); expect(storedPlaces(f)).toEqual([savedPlace()]); expect(f.saved).not.toHaveBeenCalled();
+    expect(f.root().querySelector('[role="status"]')?.textContent).toContain('本地保存失败');
+  });
+
+  it('does not claim a save when the preference adapter has no save method or explicitly reports failure', () => {
+    for (const persist of [false, () => false] as const) {
+      const f = fixture({ preferences: { category: 'custom', orders: {} }, persist }); f.api.showTeleport(); fillCustom(f);
+      f.root().querySelector<HTMLButtonElement>('[data-save-place]')!.click();
+      expect(f.root().querySelector('[role="status"]')?.textContent).toContain('本地保存失败');
+      expect(f.ids()).toEqual([]); expect(storedPlaces(f)).toEqual([]); expect(f.requestRoute).not.toHaveBeenCalled(); f.tools.remove();
+    }
+  });
+
+  it('waits for asynchronous persistence and rejects stale completion UI after switching servers', async () => {
+    let commitPending: (() => void) | undefined, resolve!: (value: unknown) => void;
+    const f = fixture({ storage: new Map([['1', { category: 'custom', orders: {} }], ['2', { category: 'custom', orders: {} }]]),
+      persist(_value, commit) { commitPending = commit; return new Promise(success => { resolve = success; }); } });
+    f.api.showTeleport(); fillCustom(f); f.root().querySelector<HTMLButtonElement>('[data-save-place]')!.click();
+    expect(storedPlaces(f)).toEqual([]); expect(f.ids()).toEqual([]); expect(f.root().querySelector('[role="status"]')?.textContent).not.toContain('已保存');
+    f.setProfile('2'); f.api.showTeleport(); commitPending!(); resolve(undefined); await Promise.resolve();
+    expect(storedPlaces(f, '1')).toEqual([savedPlace()]); expect(storedPlaces(f, '2')).toEqual([]); expect(f.ids()).toEqual([]);
+    expect(f.root().querySelector('[role="status"]')?.textContent).not.toContain('已保存');
+    expect(f.requestRoute).not.toHaveBeenCalled();
+  });
+});
+
 function resizePointer(target: EventTarget, type: string, x: number, y: number, pointerId = 7, pointerType = 'mouse', button = 0) {
   const event = new MouseEvent(type, { clientX: x, clientY: y, button, bubbles: true, cancelable: true });
   Object.defineProperties(event, { pointerId: { value: pointerId }, pointerType: { value: pointerType } });
   target.dispatchEvent(event);
 }
+
+function mockSortAnimations(f: ReturnType<typeof fixture>) {
+  const animations: Array<{ node: HTMLElement; cancel: ReturnType<typeof vi.fn>; onfinish?: (() => void) | null; oncancel?: (() => void) | null }> = [];
+  const animate = vi.fn(function (this: HTMLElement) {
+    const animation: (typeof animations)[number] = { node: this, cancel: vi.fn() };
+    animation.cancel.mockImplementation(() => animation.oncancel?.()); animations.push(animation); return animation;
+  });
+  for (const row of f.list().querySelectorAll<HTMLElement>('[data-route-id]')) Object.defineProperty(row, 'animate', { configurable: true, value: animate });
+  return { animate, animations };
+}
+
+describe('destination drag motion', () => {
+  it.each([1, 1.5])('lifts a held row, follows the pointer at %s ancestor scale, stays inside the viewport and settles only on release', scale => {
+    const f = fixture(); f.measurePanels(scale); f.api.showTeleport(); f.measureRows();
+    const row = f.row('a'), viewport = f.root().querySelector<HTMLElement>('.lastro-route-scroll')!;
+    f.pointer(f.handle('a'), 'pointerdown', 20);
+    expect(row.classList.contains('is-dragging')).toBe(true); expect(f.ids()).toEqual(['a', 'b', 'c']); expect(f.saved).not.toHaveBeenCalled();
+    f.pointer(f.list(), 'pointermove', 170);
+    expect(row.classList.contains('is-drag-moving')).toBe(true); expect(row.style.getPropertyValue('--lastro-sort-offset')).not.toBe('');
+    const visualTop = () => row.getBoundingClientRect().top + parseFloat(row.style.getPropertyValue('--lastro-sort-offset')) * scale;
+    expect(visualTop()).toBeCloseTo(150 - 3 * scale);
+    f.pointer(f.list(), 'pointermove', 1000);
+    expect(visualTop()).toBeGreaterThanOrEqual(viewport.getBoundingClientRect().top);
+    expect(visualTop() + row.getBoundingClientRect().height * 1.01).toBeLessThanOrEqual(viewport.getBoundingClientRect().bottom);
+    expect(f.saved).not.toHaveBeenCalled(); f.pointer(f.list(), 'pointerup', 1000);
+    expect(row.classList.contains('is-dragging')).toBe(false); expect(row.classList.contains('is-drag-moving')).toBe(false);
+    expect(row.style.getPropertyValue('--lastro-sort-offset')).toBe(''); expect(f.saved).toHaveBeenCalledOnce();
+    expect(f.requestRoute).not.toHaveBeenCalled();
+  });
+
+  it('animates neighboring rows into place and cancels superseded animations before another reorder and release', () => {
+    const f = fixture(); f.api.showTeleport(); f.measureRows(); const motion = mockSortAnimations(f);
+    f.pointer(f.handle('a'), 'pointerdown', 20); f.pointer(f.list(), 'pointermove', 170);
+    expect(f.ids()).toEqual(['b', 'c', 'a']); expect(motion.animate).toHaveBeenCalledTimes(2);
+    expect(motion.animate).toHaveBeenCalledWith([{ transform: 'translateY(60px)' }, { transform: 'translateY(0)' }], { duration: 160, easing: 'cubic-bezier(.2,.65,.3,1)' });
+    const initial = [...motion.animations];
+    f.pointer(f.list(), 'pointermove', 0); expect(f.ids()).toEqual(['a', 'b', 'c']); expect(motion.animate).toHaveBeenCalledTimes(4);
+    initial.forEach(animation => expect(animation.cancel).toHaveBeenCalledOnce());
+    f.pointer(f.list(), 'pointerup', 0); motion.animations.slice(2).forEach(animation => expect(animation.cancel).toHaveBeenCalledOnce());
+    expect(f.saved).toHaveBeenCalledOnce(); expect(f.requestRoute).not.toHaveBeenCalled();
+  });
+
+  it('forgets finished animations instead of canceling them again on release', () => {
+    const f = fixture(); f.api.showTeleport(); f.measureRows(); const motion = mockSortAnimations(f);
+    f.pointer(f.handle('a'), 'pointerdown', 20); f.pointer(f.list(), 'pointermove', 170);
+    motion.animations.forEach(animation => animation.onfinish?.()); f.pointer(f.list(), 'pointerup', 170);
+    motion.animations.forEach(animation => expect(animation.cancel).not.toHaveBeenCalled());
+    expect(f.ids()).toEqual(['b', 'c', 'a']); expect(f.saved).toHaveBeenCalledOnce();
+  });
+
+  it.each(['pointercancel', 'lostpointercapture', 'window close', 'logout', 'profile switch', 'category switch'])('cleans up lifted state and active reorder animations on %s', reason => {
+    const f = fixture(); f.api.showTeleport(); f.measureRows(); const row = f.row('a'), motion = mockSortAnimations(f);
+    f.pointer(f.handle('a'), 'pointerdown', 20); f.pointer(f.list(), 'pointermove', 170); expect(motion.animations).toHaveLength(2);
+    if (reason === 'window close') f.api.teleport.remove();
+    else if (reason === 'logout') f.tools.remove();
+    else if (reason === 'profile switch') { f.setProfile('2'); f.api.showTeleport(); }
+    else if (reason === 'category switch') f.api.select('boss');
+    else f.pointer(f.list(), reason, 170);
+    motion.animations.forEach(animation => expect(animation.cancel).toHaveBeenCalledOnce());
+    expect(row.classList.contains('is-dragging')).toBe(false); expect(row.classList.contains('is-drag-moving')).toBe(false);
+    expect(row.style.getPropertyValue('--lastro-sort-offset')).toBe('');
+    expect((f.storage.get('1') as { orders: Record<string, unknown> }).orders.npc).toBeUndefined(); expect(f.requestRoute).not.toHaveBeenCalled();
+  });
+
+  it('keeps sorting available while suppressing FLIP and CSS motion for reduced-motion users', () => {
+    const original = Object.getOwnPropertyDescriptor(window, 'matchMedia');
+    try {
+      Object.defineProperty(window, 'matchMedia', { configurable: true, value: vi.fn(() => ({ matches: true })) });
+      const f = fixture(); f.api.showTeleport(); f.measureRows(); const motion = mockSortAnimations(f);
+      f.pointer(f.handle('a'), 'pointerdown', 20); f.pointer(f.list(), 'pointermove', 170); f.pointer(f.list(), 'pointerup', 170);
+      expect(f.ids()).toEqual(['b', 'c', 'a']); expect(f.saved).toHaveBeenCalledOnce(); expect(motion.animate).not.toHaveBeenCalled();
+      expect(window.matchMedia).toHaveBeenCalledWith('(prefers-reduced-motion: reduce)');
+      expect(toolsCss).toMatch(/@media\(prefers-reduced-motion:reduce\).*transition:none;.*transform:none;/);
+    } finally {
+      if (original) Object.defineProperty(window, 'matchMedia', original);
+      else delete (window as { matchMedia?: typeof window.matchMedia }).matchMedia;
+    }
+  });
+});
 
 describe('native tools window resize handles', () => {
   it.each([
@@ -272,7 +780,8 @@ describe('native tools window resize handles', () => {
     assertFits();
     const scroll = f.root().querySelector<HTMLElement>('.lastro-route-scroll')!; scroll.scrollTop = 200;
     const height = f.api.teleport._host.style.height;
-    f.api.select('custom'); assertFits(); expect(f.root().querySelector<HTMLFormElement>('[data-custom-form]')!.hidden).toBe(false);
+    f.api.select('custom'); assertFits(); f.root().querySelector<HTMLButtonElement>('[data-add-place]')!.click();
+    assertFits(); expect(f.root().querySelector<HTMLFormElement>('[data-custom-form]')!.hidden).toBe(false);
     f.api.select('npc'); assertFits(); expect(scroll.hidden).toBe(false); expect(scroll.scrollTop).toBe(0);
     expect(f.api.teleport._host.style.height).toBe(height); expect(f.requestRoute).not.toHaveBeenCalled();
   });
@@ -315,6 +824,7 @@ describe('separate automation and teleport windows', () => {
     expect(f.tools._host.style.display).toBe('none'); expect(f.ids()).toEqual(['a', 'b', 'c']);
     f.key('a', 'ArrowDown'); expect(f.ids()).toEqual(['b', 'a', 'c']);
     f.api.select('custom'); assertFits(f.api.teleport._host);
+    f.root().querySelector<HTMLButtonElement>('[data-add-place]')!.click(); assertFits(f.api.teleport._host);
     expect(f.root().querySelector<HTMLFormElement>('[data-custom-form]')!.hidden).toBe(false);
     f.api.showAutomation(); assertFits(f.tools._host);
     expect(f.api.teleport._host.isConnected).toBe(false);
@@ -614,6 +1124,29 @@ describe('destination sorting and profile persistence', () => {
 });
 
 describe('destination actions and lifecycle', () => {
+  it('deactivates classic entry resources without logging out and recreates them only while tools remains active', () => {
+    const f = fixture({ confirm: true }); f.api.showTeleport();
+    f.row('a').querySelector<HTMLButtonElement>('.lastro-route-go')!.click();
+    f.api.deactivate(); expect(document.getElementById('lastro-tools-dock')).toBeNull(); expect(f.api.teleport._host.isConnected).toBe(false);
+    expect(f.tools.__active).toBe(true); expect(f.previousRemove).not.toHaveBeenCalled();
+    f.confirmations[0]!.yes(); expect(f.requestRoute).not.toHaveBeenCalled();
+    f.api.refreshEntry(); expect(document.getElementById('lastro-tools-dock')).not.toBeNull();
+    f.api.showTeleport(); expect(f.ids()).toEqual(['a', 'b', 'c']);
+    f.tools.remove(); f.api.refreshEntry(); expect(document.getElementById('lastro-tools-dock')).toBeNull();
+  });
+
+  it('lets the native entry reuse confirmation and checked requests without mounting the classic teleport window', async () => {
+    const f = fixture({ confirm: true });
+    expect(() => f.api.requestCustomRoute({ ...route('错误地点'), path: [] })).toThrow('Invalid route');
+    expect(f.requestRoute).not.toHaveBeenCalled();
+    let reject!: (error: Error) => void;
+    f.requestRoute.mockReturnValue(new Promise((_resolve, fail) => { reject = fail; }));
+    f.api.requestCustomRoute(route('原生快捷地点')); expect(f.requestRoute).not.toHaveBeenCalled();
+    f.confirmations[0]!.yes(); expect(f.requestRoute).toHaveBeenCalledOnce(); expect(f.tools.setStatus).toHaveBeenCalledWith('正在检查传送地点');
+    reject(new Error('地图资源不存在')); await Promise.resolve();
+    expect(f.tools.setStatus).toHaveBeenCalledWith('无法前往：地图资源不存在'); expect(f.api.teleport._host.isConnected).toBe(false);
+  });
+
   it('waits for resource checks and displays their failure without claiming a request was sent', async () => {
     const f = fixture(); f.api.showTeleport();
     let reject!: (error: Error) => void;

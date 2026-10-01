@@ -52,7 +52,7 @@ describe('activity link same-map helper', () => {
   });
 });
 
-function runtimeFixture() {
+function runtimeFixture(dataMap = 'force_map3#100#184') {
   const runtime = readFileSync('generated/runtime/Online.js', 'utf8');
   const file = ts.createSourceFile('Online.js', runtime, ts.ScriptTarget.Latest, true, ts.ScriptKind.JS);
   let factory: ts.CallExpression | undefined;
@@ -92,7 +92,7 @@ function runtimeFixture() {
   });
   const result = vm.runInContext(`${[...functions.values()].join('\n')}\n${navigation.join('\n')}\nconst adapters=${argument.getText(file)}; const links=${factory.expression.getText(file)}(adapters); ({links,adapters});`, context) as {
     links: ReturnType<typeof createLastroChatMapLinks>; adapters: { getMap(): string; canTeleport(): boolean; navigate(target: { mapname: string; x: number; y: number }): void } };
-  const parent = document.createElement('div'); result.links.render(parent, message); document.body.append(parent);
+  const parent = document.createElement('div'); result.links.render(parent, `[活动] <span class="mapname" data-map="${dataMap}">点击前往</span>`); document.body.append(parent);
   return { ...result, link: parent.querySelector('a')!, map, session, altitude, nav, context, calls, postMessage, send, notice, cancelRoute, prompts };
 }
 
@@ -103,6 +103,14 @@ describe('final runtime activity navigation adapter', () => {
     expect(f.postMessage).toHaveBeenCalledWith(expect.objectContaining({ type: 'findPath', startX: 25, startY: 41, endX: 100, endY: 184 }));
     expect(f.context._finalTargetData).toMatchObject({ map: 'force_map3', x: 100, y: 184, showWindow: false });
     expect(f.send).not.toHaveBeenCalled(); expect(f.prompts).toHaveLength(0); expect(f.nav.append).not.toHaveBeenCalled();
+  });
+  it('confirms a map-only activity on the current map and sends its native default coordinates', () => {
+    const f = runtimeFixture('force_map3');
+    expect(f.links.request(f.link)).toBe(true);
+    expect(f.prompts).toHaveLength(1); expect(f.postMessage).not.toHaveBeenCalled(); expect(f.send).not.toHaveBeenCalled();
+    f.prompts[0]!.yes();
+    expect(f.send).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ mapname: 'force_map3', x: 0, y: 0, type: 1, itemid: 14527 }));
+    expect(f.postMessage).not.toHaveBeenCalled();
   });
   it('gates loading state and canonicalizes the actual current map', () => {
     const f = runtimeFixture(); f.map.currentMap = 'FORCE_MAP3.GAT'; expect(f.adapters.getMap()).toBe('force_map3');
@@ -117,11 +125,11 @@ describe('final runtime activity navigation adapter', () => {
     const f = runtimeFixture(); f.altitude.width = width; f.altitude.height = height; f.links.request(f.link);
     expect(f.notice).toHaveBeenCalledOnce(); expect(f.cancelRoute).not.toHaveBeenCalled(); expect(f.postMessage).not.toHaveBeenCalled(); expect(f.send).not.toHaveBeenCalled();
   });
-  it('keeps cross-map type-0 confirmation and reacts to a map change while the prompt is open', () => {
+  it('keeps cross-map type-1 activity confirmation and reacts to a map change while the prompt is open', () => {
     const f = runtimeFixture(); f.map.currentMap = 'prontera.gat'; f.links.request(f.link);
     expect(f.prompts).toHaveLength(1); expect(f.send).not.toHaveBeenCalled();
     f.map.currentMap = 'force_map3.gat'; f.prompts[0]!.yes(); expect(f.postMessage).toHaveBeenCalledOnce(); expect(f.send).not.toHaveBeenCalled();
     f.map.currentMap = 'payon.gat'; f.links.request(f.link); f.prompts[1]!.yes();
-    expect(f.send).toHaveBeenCalledExactlyOnceWith({ mapname: 'force_map3', x: 100, y: 184, type: 0, itemid: 14527 });
+    expect(f.send).toHaveBeenCalledExactlyOnceWith({ mapname: 'force_map3', x: 100, y: 184, type: 1, itemid: 14527 });
   });
 });

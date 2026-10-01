@@ -562,6 +562,40 @@ function localizationRegion(source, path) {
   return { start, end, text: source.slice(start, end) };
 }
 
+/** Keep RO formatting at the status-tooltip display boundary, not in shared DB data. */
+export function setLastroStatusTooltip(node, value) {
+  if (node.matches('#WinStats .desc > .hover[data-text]')) {
+    value = String(value ?? '')
+      .replace(/\\r\\n|\\[rn]|\r\n?/g, '\n')
+      .replace(/\^[0-9a-f]{6}/gi, '');
+    node.style.whiteSpace = 'pre-line';
+    node.style.width = 'max-content';
+    node.style.height = 'auto';
+    node.style.maxWidth = 'min(420px, calc(100vw - 24px))';
+  }
+  node.textContent = value;
+}
+
+export function patchRuntimeStatusTooltips(source) {
+  const region = localizationRegion(source, 'src/UI/GUIComponent.js');
+  if (!region) return source;
+  if (source.includes('const LastROStatusTooltipText =')) throw new Error('anchor:status-tooltip-duplicate');
+  const anchor = 'node.textContent = _DB?.getMessage(msgId, "");';
+  const file = ts.createSourceFile('GUIComponent.js', region.text, ts.ScriptTarget.Latest, true, ts.ScriptKind.JS);
+  const methods = [];
+  function visit(node) {
+    if (ts.isMethodDeclaration(node) && node.name.getText(file) === 'processDataAttrs') methods.push(node);
+    ts.forEachChild(node, visit);
+  }
+  visit(file);
+  if (methods.length !== 1 || methods[0].parameters.map(node => node.name.getText(file)).join(',') !== 'node'
+      || !methods[0].modifiers?.some(node => node.kind === ts.SyntaxKind.StaticKeyword)
+      || methods[0].getText(file).split(anchor).length !== 2) throw new Error('anchor:status-tooltip-text');
+  const patched = region.text.replace(anchor, 'LastROStatusTooltipText(node, _DB?.getMessage(msgId, ""));');
+  return `const LastROStatusTooltipText = (${setLastroStatusTooltip.toString()});\n`
+    + source.slice(0, region.start) + patched + source.slice(region.end);
+}
+
 function replaceLocalizationAnchor(source, anchor, replacement, label) {
   if (source.split(anchor).length !== 2) throw new Error('anchor:map-localization-' + label);
   return source.replace(anchor, replacement);

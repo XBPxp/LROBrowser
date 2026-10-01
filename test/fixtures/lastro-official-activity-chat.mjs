@@ -1,0 +1,10 @@
+// Public LastRO client, extracted as inert source and executed only with offline stubs.
+// Source: https://game.lastro.cn/ro/Online.js?71.91
+// Source SHA256: ab9b575fe06af8f3eb86fedd0a5c134162aadb7dfeb880cb8f3f99677a69e936
+// ChatBox.addText2 UTF-16 offsets: 2840253..2841330 (end exclusive).
+// Keeping the original function proves activity type=1, first-three-field parsing,
+// and that missing coordinates reach the packet writer as undefined.
+export const officialActivityChatSource = "function(a,b,c,d,e){d=this.ui.find(\".content\");c||(c=b&x.TYPE.PUBLIC&&b&x.TYPE.SELF?\"#00FF00\":b&x.TYPE.PARTY?b&x.TYPE.SELF?\"rgb(200, 200, 100)\":\"rgb(230,215,200)\":b&x.TYPE.GUILD?\"rgb(180, 255, 180)\":b&x.TYPE.PRIVATE?\"#FFFF00\":b&x.TYPE.ERROR?\"#FF0000\":b&x.TYPE.INFO?\"#FFFF63\":b&x.TYPE.BLUE?\"#00FFFF\":b&x.TYPE.ADMIN?\"#FFFF00\":b&x.TYPE.GPTU?\"#FFFF00\":b&x.TYPE.GPTA?\"rgb(255, 255, 0)\":\"white\");b=h(\"\\x3cdiv/\\x3e\").css(\"color\",c).html(a);e?d.append(h(\"\\x3cdiv/\\x3e\").addClass(\"entering\").css(\"color\",c).html(a)):d.append(b);var f=b.find(\"span\").data(\"map\");f&&b.find(\"span\").on(\"click\",function(a){var b=f.split(\"#\");u.showPromptBox(\"\\u786e\\u5b9a\\u524d\\u5f80\\u6d3b\\u52a8\\u5730\\u56fe\\u5417?\",\"ok\",\"cancel\",function(){var a=new r.CZ.PRIVATE_AIRSHIP_REQUEST;a.mapname=b[0];a.x=b[1];a.y=b[2];a.type=1;a.itemid=14527;q.sendPacket(a)},null)}).mousedown(function(a){a.stopImmediatePropagation();return!1});a=d.find(\"div\");if(50<a.length){a=a.eq(0);if(c=a.html().match(/(blob:[^\"]+)/g))for(e=0,b=c.length;e<b;++e)window.URL.revokeObjectURL(c[e]);a.remove()}d[0].scrollTop=d[0].scrollHeight}";
+
+// Original packet serializer; b.value selects the modern 34-byte packet.
+export const officialPrivateAirshipBuildSource = "function(){if(20180704<=b.value){var d=new a(34);d.writeShort(2633);d.writeBinaryString(this.mapname,16);d.writeULong(this.x);d.writeULong(this.y);d.writeULong(this.type);d.writeULong(this.itemid)}else d=new a(26),d.writeShort(2633),d.writeBinaryString(this.mapname,16),d.writeUShort(this.x),d.writeUShort(this.y),d.writeUShort(this.type),d.writeUShort(this.itemid);return d}";

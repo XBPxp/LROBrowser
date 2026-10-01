@@ -5,16 +5,30 @@ export function installLastroToolsPanels(tools, deps, css, presetRoutes = {}) {
   function readPreferences() {
     let value;
     try { value = loadPreferences(); } catch { value = { orders: {} }; }
-    if (!value || typeof value !== 'object') value = { orders: {} };
+    if (!value || typeof value !== 'object' || Array.isArray(value)) value = { orders: {} };
     if (!value.orders || typeof value.orders !== 'object' || Array.isArray(value.orders)) value.orders = {};
     if (!value.geometry || typeof value.geometry !== 'object' || Array.isArray(value.geometry)) value.geometry = {};
+    const entries = [], seen = new Set();
+    if (value.customPlaces?.version === 1 && Array.isArray(value.customPlaces.entries)) {
+      for (const raw of value.customPlaces.entries.slice(0, 500)) {
+        try {
+          const place = normalizeCustomPlace(raw);
+          if (!seen.has(place.id)) { entries.push(place); seen.add(place.id); }
+        } catch { /* Invalid saved data must never become a route request. */ }
+      }
+    }
+    if (Object.hasOwn(value, 'customPlaces')) value.customPlaces = { version: 1, entries };
     return value;
   }
   let preferences = readPreferences(), profile = deps.getProfile?.();
-  const categories = [['npc', 'NPC'], ['train', '练级'], ['money', '打钱'], ['challenge', '挑战'], ['instance', '副本'], ['boss', 'BOSS'], ['custom', '自定义']];
+  const categories = [['npc', 'NPC'], ['train', '练级'], ['money', '打钱'], ['challenge', '挑战'], ['instance', '副本'], ['boss', 'BOSS'], ['custom', '自定义'], ['search', '搜索']];
+  const customSources = [['guide', '常用地点'], ['train', '洞穴传送'], ['wild', '野外地图'], ['mine', '我的地点'], ['other', '其他地点']];
   let selected = categories.some(([id]) => id === preferences.category) ? preferences.category : 'npc';
   let root, list, status, dock, drag, resizing, scrollFrame, confirmation, requestGeneration = 0;
+  let editingPlaceId = null, customEditorOpen = false, savingCustom = false, searchQuery = '';
+  let customSource = 'mine', customGroup = null;
   const layouts = new Map();
+  const sortAnimations = new Map();
   let listeningForResize = false;
   const catalog = Object.create(null);
   const teleport = new GUIComponent('LastROTeleport', css);
@@ -30,6 +44,214 @@ export function installLastroToolsPanels(tools, deps, css, presetRoutes = {}) {
     try { preferences.save?.(); if (message && status) status.textContent = message; }
     catch { if (status) status.textContent = '顺序已调整，但本地保存失败。'; }
   }
+  function normalizeCustomPlace(raw) {
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw) || typeof raw.id !== 'string' || !/^[a-z0-9_-]{1,64}$/.test(raw.id)) throw new Error('地点资料无效');
+    if (typeof raw.map !== 'string') throw new Error('请输入有效地图名');
+    const map = raw.map.trim().toLowerCase().replace(/\.gat$/i, '');
+    if (!/^[a-z0-9_@#-]{1,16}$/.test(map)) throw new Error('请输入有效地图名');
+    for (const value of [raw.x, raw.y]) if (!Number.isInteger(value) || value < 0 || value > 65535) throw new Error('坐标必须为 0–65535 的整数');
+    if (raw.name != null && typeof raw.name !== 'string') throw new Error('请输入有效地点名称');
+    if (raw.desc != null && typeof raw.desc !== 'string') throw new Error('请输入有效备注');
+    const name = raw.name?.trim() || `${map} ${raw.x},${raw.y}`, desc = raw.desc?.trim() || '';
+    if (name.length > 80 || desc.length > 200) throw new Error('地点名称最多 80 字，备注最多 200 字');
+    return { id: raw.id, name, desc, map, x: raw.x, y: raw.y };
+  }
+  function customRoute(place) {
+    const destination = [place.map, place.x, place.y];
+    return normalizeRoute({ npc: place.name, desc: place.desc, outset: destination, path: [destination] });
+  }
+  function refreshCustomRoutes() {
+    for (const id of Object.keys(catalog.custom || {})) if (id.startsWith('user:')) delete catalog.custom[id];
+    for (const place of customEntries()) {
+      try { catalog.custom[`user:${place.id}`] = { ...customRoute(place), customPlaceId: place.id, customSource: 'mine', customGroup: '' }; }
+      catch { /* Keep invalid or unsupported saved destinations out of the list. */ }
+    }
+  }
+  function customEntries() { return preferences.customPlaces?.entries || []; }
+  function sortingAllowed() { return selected !== 'search'; }
+  function matchesSearch(route) {
+    const query = searchQuery.trim().toLowerCase();
+    if (!query) return true;
+    const destinations = [route.outset, ...(route.path || [])].filter(Array.isArray);
+    const text = [route.npc, route.desc, ...destinations.flatMap(destination => [destination.join(' '), `${destination[1]},${destination[2]}`])].join(' ').toLowerCase();
+    return text.includes(query);
+  }
+  function updateSearch(value) {
+    stopDrag(true); searchQuery = value;
+    root.querySelector('[data-search-routes]').value = value;
+    renderList(); resetScroll(teleport, '.lastro-route-scroll');
+  }
+  function customSourceFromId(id) { return /^upstream:(guide|train|wild):/.exec(id)?.[1] || 'other'; }
+  function sourceName(category, route) {
+    if (category !== 'custom') return categories.find(([id]) => id === category)?.[1] || category;
+    const source = customSources.find(([id]) => id === route.customSource)?.[1] || '其他地点';
+    return route.customGroup ? `自定义 / ${source} / ${route.customGroup}` : `自定义 / ${source}`;
+  }
+  function searchEntries() {
+    return categories.filter(([id]) => id !== 'search').flatMap(([category]) => ordered(category).map(id => ({ category, id, key: `${category}:${id}`, route: catalog[category][id] })));
+  }
+  function customIds() {
+    return ordered('custom').filter(id => {
+      const route = catalog.custom[id];
+      return route.customSource === customSource && (customGroup == null || route.customGroup === customGroup);
+    });
+  }
+  function saveVisibleOrder(ids) {
+    const visible = new Set(ids), next = [...ids];
+    // Replace only this group's displayed positions; records in other groups
+    // retain their existing places in the complete order.
+    preferences.orders[selected] = ordered(selected).map(id => visible.has(id) ? next.shift() : id);
+    save();
+  }
+  function groupTabs(container, entries, current, choose, attribute) {
+    container.replaceChildren();
+    entries.forEach(([id, name], index) => {
+      const button = element('button', 'lastro-tab', name), active = id === current;
+      button.type = 'button'; button.dataset[attribute] = id; button.setAttribute('role', 'tab');
+      button.classList.toggle('is-active', active); button.setAttribute('aria-selected', String(active)); button.tabIndex = active ? 0 : -1;
+      button.addEventListener('click', () => choose(id));
+      button.addEventListener('keydown', event => {
+        if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+        event.preventDefault();
+        const next = event.key === 'Home' ? 0 : event.key === 'End' ? entries.length - 1 : (index + (event.key === 'ArrowLeft' ? -1 : 1) + entries.length) % entries.length;
+        choose(entries[next][0]);
+        [...container.querySelectorAll('button')].find(node => node.dataset[attribute] === entries[next][0])?.focus();
+      });
+      container.append(button);
+    });
+  }
+  function selectCustomSource(value) {
+    if (!customSources.some(([id]) => id === value)) return;
+    stopDrag(true); clearCustomEditor(); customSource = value; customGroup = null;
+    renderList(); resetScroll(teleport, '.lastro-route-scroll');
+  }
+  function selectCustomGroup(value) {
+    stopDrag(true); clearCustomEditor(); customGroup = value;
+    renderList(); resetScroll(teleport, '.lastro-route-scroll');
+  }
+  function renderCustomNavigation() {
+    const sourceTabs = root.querySelector('[data-custom-sources]'), groupTabsRoot = root.querySelector('[data-custom-groups]');
+    sourceTabs.hidden = selected !== 'custom'; groupTabsRoot.hidden = true; groupTabsRoot.replaceChildren();
+    if (selected !== 'custom') return;
+    const availableSources = customSources.filter(([id]) => id !== 'other' || Object.values(catalog.custom).some(route => route.customSource === id));
+    groupTabs(sourceTabs, availableSources, customSource, selectCustomSource, 'customSource');
+    const routes = Object.values(catalog.custom).filter(route => route.customSource === customSource);
+    const groups = [...new Set(routes.map(route => route.customGroup || ''))];
+    if (customSource === 'guide' || customSource === 'train' || (customSource === 'other' && groups.some(Boolean))) {
+      if (!groups.includes(customGroup)) customGroup = groups[0] ?? null;
+      groupTabsRoot.hidden = groups.length === 0;
+      groupTabs(groupTabsRoot, groups.map(group => [group, group || '其他地点']), customGroup, selectCustomGroup, 'customGroup');
+    } else customGroup = null;
+  }
+  function clearCustomEditor() {
+    editingPlaceId = null; customEditorOpen = false;
+    const form = root?.querySelector('[data-custom-form]');
+    if (!form) return;
+    form.hidden = true;
+    form.reset();
+    form.querySelector('[data-custom-title]').textContent = '添加自定义地点';
+    form.querySelector('[data-save-place]').textContent = '保存地点';
+    form.querySelector('[data-cancel-edit]').hidden = true;
+  }
+  function openCustomEditor() {
+    if (savingCustom) return;
+    cancelConfirmation(); clearCustomEditor(); customEditorOpen = true;
+    if (selected === 'custom') { customSource = 'mine'; customGroup = null; renderList(); }
+    const form = root.querySelector('[data-custom-form]');
+    form.hidden = false; form.querySelector('[data-cancel-edit]').hidden = false;
+    resetScroll(teleport, '.lastro-route-scroll');
+    form.elements.namedItem('name').focus(); fitPanel(teleport, 'teleport', 34);
+  }
+  function editCustomPlace(id) {
+    if (savingCustom) return;
+    const place = customEntries().find(entry => entry.id === id);
+    if (!place) return;
+    openCustomEditor();
+    editingPlaceId = id;
+    const form = root.querySelector('[data-custom-form]');
+    for (const [name, value] of Object.entries(place)) if (name !== 'id') form.elements.namedItem(name).value = String(value);
+    form.querySelector('[data-custom-title]').textContent = '编辑自定义地点';
+    form.querySelector('[data-save-place]').textContent = '保存修改';
+    form.querySelector('[data-cancel-edit]').hidden = false;
+    form.elements.namedItem('name').focus();
+  }
+  function placeFromForm() {
+    const form = root.querySelector('[data-custom-form]');
+    const coordinate = name => {
+      const text = form.elements.namedItem(name).value.trim(), value = Number(text);
+      if (!/^\d{1,5}$/.test(text) || value > 65535) throw new Error('坐标必须为 0–65535 的整数');
+      return value;
+    };
+    return normalizeCustomPlace({ id: editingPlaceId || 'draft', name: form.elements.namedItem('name').value,
+      desc: form.elements.namedItem('desc').value, map: form.elements.namedItem('map').value, x: coordinate('x'), y: coordinate('y') });
+  }
+  function readCurrentLocation() {
+    if (savingCustom) return;
+    try {
+      const current = deps.getCurrentLocation?.();
+      if (!current) throw new Error('Location is not ready');
+      // Validate the complete snapshot before writing any field. A missing map
+      // or invalid coordinate must leave the user's draft and its notes intact.
+      const place = normalizeCustomPlace({ id: 'current', map: current.map, x: current.x, y: current.y });
+      const form = root.querySelector('[data-custom-form]');
+      for (const name of ['map', 'x', 'y']) form.elements.namedItem(name).value = String(place[name]);
+      status.textContent = `已读取当前位置：${place.map} ${place.x},${place.y}`;
+    } catch { status.textContent = '角色或地图尚未就绪，无法读取当前位置，请稍后重试。'; }
+  }
+  async function saveCustomPlaces(entries, message) {
+    if (savingCustom) return false;
+    const current = preferences, currentProfile = profile;
+    const next = { ...current, customPlaces: { version: 1, entries } };
+    const persist = current.save;
+    savingCustom = true;
+    root?.querySelectorAll('[data-custom-action]').forEach(button => { button.disabled = true; });
+    try {
+      if (typeof persist !== 'function') throw new Error('本地存储不可用');
+      // Save a complete copy through the native method's `this` contract. The
+      // active preference object and visible routes change only after success.
+      const result = persist.call(next);
+      // Native Preferences.save is synchronous; also handle asynchronous adapters
+      // without claiming success before durable storage has completed.
+      if (result && typeof result.then === 'function') { if (await result === false) throw new Error('本地保存失败'); }
+      else if (result === false) throw new Error('本地保存失败');
+      current.customPlaces = next.customPlaces;
+      if (preferences === current && currentProfile === deps.getProfile?.()) {
+        clearCustomEditor(); refreshCustomRoutes(); renderList(); status.textContent = message;
+      }
+      return true;
+    } catch {
+      if (preferences === current && currentProfile === deps.getProfile?.()) status.textContent = '本地保存失败，地点未保存，请重试。';
+      return false;
+    } finally {
+      savingCustom = false;
+      root?.querySelectorAll('[data-custom-action]').forEach(button => { button.disabled = false; });
+    }
+  }
+  function saveCustomPlace() {
+    if (savingCustom) return;
+    try {
+      const place = placeFromForm(), entries = customEntries().map(entry => ({ ...entry }));
+      if (editingPlaceId) {
+        const index = entries.findIndex(entry => entry.id === editingPlaceId);
+        if (index < 0) throw new Error('地点已不存在，请重新添加');
+        entries[index] = { ...place, id: editingPlaceId };
+      } else {
+        if (entries.length >= 500) throw new Error('最多保存 500 个自定义地点');
+        let index = 1;
+        while (entries.some(entry => entry.id === `place-${index}`)) index++;
+        entries.push({ ...place, id: `place-${index}` });
+      }
+      void saveCustomPlaces(entries, editingPlaceId ? '地点修改已保存' : '自定义地点已保存');
+    } catch (error) { status.textContent = error.message; }
+  }
+  function deleteCustomPlace(id) {
+    if (savingCustom) return;
+    const place = customEntries().find(entry => entry.id === id);
+    if (!place) return;
+    confirmAction(`是否删除自定义地点“${place.name}”？`, () => {
+      void saveCustomPlaces(customEntries().filter(entry => entry.id !== id), '自定义地点已删除');
+    });
+  }
   function ordered(category) {
     const entries = catalog[category] || {};
     const saved = Array.isArray(preferences.orders[category]) ? preferences.orders[category] : [];
@@ -40,6 +262,9 @@ export function installLastroToolsPanels(tools, deps, css, presetRoutes = {}) {
       stopPanelResize(true, false);
       cancelConfirmation(); deps.cancelRoute?.();
       profile = deps.getProfile?.(); preferences = readPreferences();
+      clearCustomEditor();
+      searchQuery = ''; customSource = 'mine'; customGroup = null;
+      if (root) root.querySelector('[data-search-routes]').value = '';
       layouts.clear();
       selected = categories.some(([id]) => id === preferences.category) ? preferences.category : 'npc';
     }
@@ -51,8 +276,10 @@ export function installLastroToolsPanels(tools, deps, css, presetRoutes = {}) {
     for (const [category, entries] of Object.entries(deps.getPresetRoutes?.() || presetRoutes)) {
       if (!Object.hasOwn(catalog, category)) continue;
       for (const [id, raw] of Object.entries(entries || {})) {
-        try { catalog[category][id] = normalizeRoute(raw); }
-        catch { catalog[category][id] = { npc: raw?.npc || '未命名地点', desc: raw?.desc || '地点资料暂不可用', unavailable: true }; }
+        const routeId = category === 'custom' ? `preset:${id}` : id;
+        const metadata = category === 'custom' ? { customSource: customSourceFromId(id), customGroup: typeof raw?.group === 'string' ? raw.group.trim() : '' } : {};
+        try { catalog[category][routeId] = { ...normalizeRoute(raw), ...metadata }; }
+        catch { catalog[category][routeId] = { npc: raw?.npc || '未命名地点', desc: raw?.desc || '地点资料暂不可用', unavailable: true, ...metadata }; }
       }
     }
     // Keep every existing destination available when an original catalog is absent.
@@ -63,62 +290,96 @@ export function installLastroToolsPanels(tools, deps, css, presetRoutes = {}) {
         try { catalog[to][`${from}:${id}`] = normalizeRoute(raw); } catch { /* Same validation as the existing selector. */ }
       }
     }
+    refreshCustomRoutes();
   }
   function stopDrag(cancel = false) {
     if (scrollFrame != null) win.cancelAnimationFrame?.(scrollFrame);
     scrollFrame = null;
+    cancelSortAnimations();
     if (!drag) return;
     const previous = drag;
     drag = null;
-    previous.node.classList.remove('is-dragging');
+    previous.node.classList.remove('is-dragging', 'is-drag-moving'); previous.node.style.removeProperty('--lastro-sort-offset');
     previous.handle.setAttribute('aria-grabbed', 'false');
     if (cancel) for (const id of previous.order) {
       const node = [...list.children].find(row => row.dataset.routeId === id);
       if (node) list.append(node);
     }
     else if (previous.moved) {
-      preferences.orders[selected] = [...list.children].map(row => row.dataset.routeId);
-      save();
+      saveVisibleOrder([...list.children].map(row => row.dataset.routeId));
     }
     try { list.releasePointerCapture?.(previous.pointerId); } catch { /* Capture may already be released. */ }
   }
+  function cancelSortAnimations() {
+    for (const animation of sortAnimations.values()) animation.cancel?.();
+    sortAnimations.clear();
+  }
+  function reducedMotion() { return win.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches === true; }
+  function routeLayoutTop(node) {
+    const viewport = root.querySelector('.lastro-route-scroll');
+    if (node.offsetParent === viewport) return viewport.getBoundingClientRect().top + (node.offsetTop - viewport.scrollTop) * drag.scaleY;
+    return node.getBoundingClientRect().top;
+  }
+  function followDragPointer() {
+    if (!drag?.moved) return;
+    const viewport = root.querySelector('.lastro-route-scroll').getBoundingClientRect();
+    const height = (drag.node.offsetHeight ? drag.node.offsetHeight * drag.scaleY : drag.node.getBoundingClientRect().height) * 1.01;
+    const minTop = viewport.top + 4 * drag.scaleY, maxTop = Math.max(minTop, viewport.bottom - height - 4 * drag.scaleY);
+    const desiredTop = drag.startTop + drag.y - drag.startY - 3 * drag.scaleY;
+    const top = Math.max(minTop, Math.min(maxTop, desiredTop));
+    drag.node.style.setProperty('--lastro-sort-offset', `${(top - routeLayoutTop(drag.node)) / drag.scaleY}px`);
+  }
   function moveAtPointer() {
     if (!drag || !drag.moved) return;
-    const before = [...list.children].find(row => row !== drag.node && drag.y < row.getBoundingClientRect().top + row.getBoundingClientRect().height / 2);
+    const rows = [...list.children].filter(row => row !== drag.node);
+    const before = rows.find(row => drag.y < routeLayoutTop(row) + (row.offsetHeight ? row.offsetHeight * drag.scaleY : row.getBoundingClientRect().height) / 2);
+    if (drag.node.nextElementSibling === (before || null)) return;
+    const positions = new Map(rows.map(row => [row, row.getBoundingClientRect().top]));
+    cancelSortAnimations();
     list.insertBefore(drag.node, before || null);
+    if (reducedMotion()) return;
+    for (const row of rows) {
+      const offset = (positions.get(row) - row.getBoundingClientRect().top) / drag.scaleY;
+      if (Math.abs(offset) < .5 || typeof row.animate !== 'function') continue;
+      const animation = row.animate([{ transform: `translateY(${offset}px)` }, { transform: 'translateY(0)' }], { duration: 160, easing: 'cubic-bezier(.2,.65,.3,1)' });
+      sortAnimations.set(row, animation);
+      const cleanup = () => { if (sortAnimations.get(row) === animation) sortAnimations.delete(row); };
+      animation.onfinish = animation.oncancel = cleanup;
+    }
   }
   function autoScroll() {
     if (!drag) return;
     const viewport = root.querySelector('.lastro-route-scroll');
     const bounds = viewport.getBoundingClientRect();
     const delta = drag.y < bounds.top + 28 ? -8 : drag.y > bounds.bottom - 28 ? 8 : 0;
-    if (delta && drag.moved) { viewport.scrollTop += delta; moveAtPointer(); }
+    if (delta && drag.moved) { viewport.scrollTop += delta; moveAtPointer(); followDragPointer(); }
     scrollFrame = win.requestAnimationFrame?.(autoScroll);
   }
   function commitMove(id, offset) {
-    const order = ordered(selected);
+    if (!sortingAllowed()) return;
+    const order = [...list.querySelectorAll('[data-route-id]')].map(row => row.dataset.routeId);
     const index = order.indexOf(id), next = index + offset;
     if (index < 0 || next < 0 || next >= order.length) return;
     [order[index], order[next]] = [order[next], order[index]];
-    preferences.orders[selected] = order;
+    saveVisibleOrder(order);
     renderList();
     [...list.querySelectorAll('[data-sort-handle]')].find(node => node.closest('[data-route-id]').dataset.routeId === id)?.focus();
-    save();
   }
   function run(route) {
     const generation = ++requestGeneration;
     const complete = mode => {
       if (generation !== requestGeneration || mode == null) return;
-      status.textContent = `${mode === 'navigation' ? '已开始导航' : '已发送传送请求'}：${route.npc}`;
+      const message = `${mode === 'navigation' ? '已开始导航' : '已发送传送请求'}：${route.npc}`;
+      if (status) status.textContent = message; tools.setStatus?.(message);
       fitPanel(teleport, 'teleport', 34);
     };
     const failed = error => {
-      if (generation === requestGeneration) { status.textContent = `无法前往：${error.message}`; fitPanel(teleport, 'teleport', 34); }
+      if (generation === requestGeneration) { const message = `无法前往：${error.message}`; if (status) status.textContent = message; tools.setStatus?.(message); fitPanel(teleport, 'teleport', 34); }
     };
     try {
       const mode = requestRoute(route);
       if (mode && typeof mode.then === 'function') {
-        status.textContent = '正在检查传送地点';
+        if (status) status.textContent = '正在检查传送地点'; tools.setStatus?.('正在检查传送地点');
         mode.then(complete, failed);
       } else complete(mode);
     } catch (error) { failed(error); }
@@ -134,17 +395,20 @@ export function installLastroToolsPanels(tools, deps, css, presetRoutes = {}) {
     confirmation = null; previous.settled = true; previous.popup?.remove?.();
   }
   function go(route) {
-    if (!deps.showPrompt) { run(route); return; }
+    confirmAction(`是否前往${route.npc}？`, () => run(route));
+  }
+  function confirmAction(message, action) {
+    if (!deps.showPrompt) { action(); return; }
     if (confirmation) return;
     const pending = { settled: false, popup: null }; confirmation = pending;
     const finish = yes => {
       if (pending.settled) return;
       pending.settled = true;
       if (confirmation === pending) confirmation = null;
-      if (yes) run(route);
+      if (yes) action();
     };
     try {
-      pending.popup = deps.showPrompt(`是否前往${route.npc}？`, () => finish(true), () => finish(false));
+      pending.popup = deps.showPrompt(message, () => finish(true), () => finish(false));
       if (pending.popup) {
         const previousRemove = pending.popup.onRemove;
         pending.popup.onRemove = function (...args) {
@@ -152,29 +416,39 @@ export function installLastroToolsPanels(tools, deps, css, presetRoutes = {}) {
           return previousRemove?.apply(this, args);
         };
       } else if (!pending.settled) finish(false);
-    } catch (error) { finish(false); status.textContent = `无法打开确认窗口：${error.message}`; }
+    } catch (error) { finish(false); if (status) status.textContent = `无法打开确认窗口：${error.message}`; }
   }
   function renderList() {
     stopDrag(true);
     list.replaceChildren();
-    root.querySelector('[data-custom-form]').hidden = selected !== 'custom';
-    root.querySelector('.lastro-route-scroll').hidden = selected === 'custom';
+    root.querySelector('[data-custom-form]').hidden = !['custom', 'search'].includes(selected) || !customEditorOpen;
+    root.querySelector('[data-custom-toolbar]').hidden = selected !== 'custom';
+    root.querySelector('[data-search-toolbar]').hidden = selected !== 'search';
+    root.querySelector('[data-clear-route-search]').hidden = !searchQuery;
+    root.querySelector('[data-reset-order]').hidden = !sortingAllowed();
+    renderCustomNavigation();
+    root.querySelector('.lastro-route-scroll').hidden = false;
     root.querySelectorAll('[data-category]').forEach(tab => {
       const active = tab.dataset.category === selected;
       tab.classList.toggle('is-active', active);
       tab.setAttribute('aria-selected', String(active));
       tab.tabIndex = active ? 0 : -1;
     });
-    for (const id of ordered(selected)) {
-      const route = catalog[selected][id];
+    const entries = selected === 'search' ? searchQuery.trim() ? searchEntries().filter(entry => matchesSearch(entry.route)) : []
+      : (selected === 'custom' ? customIds() : ordered(selected)).map(id => ({ category: selected, id, key: id, route: catalog[selected][id] }));
+    root.querySelector('[data-custom-results]').textContent = `${entries.length} 个地点`;
+    root.querySelector('[data-search-results]').textContent = searchQuery.trim() ? `找到 ${entries.length} 个地点` : '可搜索全部内置及已保存地点';
+    for (const entry of entries) {
+      const { route, category } = entry, id = entry.key;
       const row = element('li', 'lastro-route-row');
-      row.dataset.routeId = id;
+      row.dataset.routeId = id; row.dataset.routeCategory = category;
       const handle = element('button', 'lastro-sort-handle', '⋮⋮');
       handle.type = 'button';
       handle.dataset.sortHandle = '';
       handle.setAttribute('aria-label', `调整${route.npc}的位置`);
       handle.setAttribute('aria-grabbed', 'false');
       handle.title = '上下拖拽排序，也可使用方向键';
+      if (!sortingAllowed()) { handle.disabled = true; handle.hidden = true; }
       handle.addEventListener('keydown', event => {
         if (event.key !== 'ArrowUp' && event.key !== 'ArrowDown') return;
         event.preventDefault(); event.stopPropagation();
@@ -182,19 +456,42 @@ export function installLastroToolsPanels(tools, deps, css, presetRoutes = {}) {
       });
       const text = element('div', 'lastro-route-copy');
       text.append(element('strong', 'lastro-route-name', route.npc), element('span', 'lastro-route-desc', route.desc));
+      if (selected === 'custom' || selected === 'search') {
+        const destination = route.outset || route.path?.[0];
+        const source = sourceName(category, route);
+        text.append(element('span', 'lastro-route-location', destination ? `${source} · ${destination[0]} ${destination[1]},${destination[2]}` : source));
+      }
       const button = element('button', 'lastro-button lastro-route-go', '前往');
       button.type = 'button'; button.setAttribute('aria-label', `前往${route.npc}`);
       if (route.unavailable) { button.disabled = true; button.title = route.unavailableReason || '地点资料暂不可用'; button.textContent = '不可用'; }
       button.addEventListener('click', () => go(route));
-      row.append(handle, text, button); list.append(row);
+      const actions = element('div', 'lastro-route-actions'); actions.append(button);
+      if (route.customPlaceId) {
+        for (const [name, label, action] of [['edit', '编辑', editCustomPlace], ['delete', '删除', deleteCustomPlace]]) {
+          const control = element('button', 'lastro-button lastro-route-manage', label);
+          control.type = 'button'; control.dataset.customAction = ''; control.dataset[`${name}Place`] = route.customPlaceId;
+          control.disabled = savingCustom; control.setAttribute('aria-label', `${label}${route.npc}`);
+          control.addEventListener('click', () => action(route.customPlaceId)); actions.append(control);
+        }
+      }
+      row.append(handle, text, actions); list.append(row);
     }
-    if (!list.children.length && selected !== 'custom') list.append(element('li', 'lastro-route-empty', '此分类暂无可用地点。'));
+    if (!list.children.length) list.append(element('li', 'lastro-route-empty', selected === 'search' ? searchQuery.trim() ? '未找到匹配地点，请修改或清空搜索。' : '请输入名称、地图、备注或坐标搜索地点。' : selected === 'custom' && customSource === 'mine' ? '尚无已保存地点，可点击“添加自定义地点”保存。' : '此分类暂无可用地点。'));
     teleport._setupScrollbars?.();
     fitPanel(teleport, 'teleport', 34);
   }
   function select(category) {
     if (!categories.some(([id]) => id === category)) return;
-    stopDrag(true); selected = category; preferences.category = category; renderList(); resetScroll(teleport, '.lastro-route-scroll'); save();
+    stopDrag(true); clearCustomEditor(); selected = category; preferences.category = category; renderList(); resetScroll(teleport, '.lastro-route-scroll'); save();
+  }
+  function resetOrder() {
+    if (!sortingAllowed()) return;
+    stopDrag(true);
+    if (selected === 'custom') {
+      const ids = new Set(customIds());
+      saveVisibleOrder(Object.keys(catalog.custom).filter(id => ids.has(id)));
+    } else { delete preferences.orders[selected]; save(); }
+    renderList();
   }
   function resetScroll(component, selector) {
     const viewport = component.getRoot().querySelector(selector);
@@ -454,7 +751,22 @@ export function installLastroToolsPanels(tools, deps, css, presetRoutes = {}) {
   };
   const previousMapChanged = tools.onMapChanged;
   tools.onMapChanged = function (...args) { this._lastroMapTransition = false; deps.routeMapChanged?.(); return previousMapChanged?.apply(this, args); };
-  teleport.render = () => `<div class="lastro-tools">${titlebar('传送地点')}<div class="lastro-teleport-body"><div class="lastro-tabs lastro-route-tabs" role="tablist" aria-label="传送分类">${categories.map(([id, name]) => `<button type="button" class="lastro-tab" role="tab" data-category="${id}">${name}</button>`).join('')}</div><div class="lastro-route-scroll" data-scrollbar-skin="blue"><ul class="lastro-route-list" aria-label="传送地点列表"></ul><div class="lastro-route-footer"><button type="button" class="lastro-button" data-reset-order>恢复默认</button></div></div><form data-custom-form hidden><label class="lastro-line">地图名<input name="map" required maxlength="20" placeholder="prontera" autocomplete="off"></label><label class="lastro-line">X 坐标<input name="x" type="number" required min="0" max="65535" step="1"></label><label class="lastro-line">Y 坐标<input name="y" type="number" required min="0" max="65535" step="1"></label><button type="submit" class="lastro-button">前往</button></form><div class="lastro-status" role="status" aria-live="polite"></div></div></div>`;
+  teleport.render = () => `<div class="lastro-tools">${titlebar('传送地点')}<div class="lastro-teleport-body">
+    <div class="lastro-tabs lastro-route-tabs" role="tablist" aria-label="传送分类">${categories.map(([id, name]) => `<button type="button" class="lastro-tab" role="tab" data-category="${id}">${name}</button>`).join('')}</div>
+    <div class="lastro-tabs lastro-route-tabs lastro-custom-source-tabs" data-custom-sources role="tablist" aria-label="自定义地点类别" hidden></div>
+    <div class="lastro-tabs lastro-route-tabs lastro-custom-group-tabs" data-custom-groups role="tablist" aria-label="上游地点分组" hidden></div>
+    <div class="lastro-custom-toolbar" data-custom-toolbar hidden><span class="lastro-help" data-custom-results aria-live="polite"></span><button type="button" class="lastro-button" data-custom-action data-add-place>添加自定义地点</button></div>
+    <div class="lastro-search-toolbar" data-search-toolbar hidden><label class="lastro-route-search">搜索<input data-search-routes maxlength="100" placeholder="名称、地图、备注或坐标" autocomplete="off"></label><button type="button" class="lastro-button" data-clear-route-search hidden>清空</button><span class="lastro-help lastro-search-results" data-search-results aria-live="polite"></span></div>
+    <div class="lastro-route-scroll" data-scrollbar-skin="blue">
+      <form data-custom-form hidden><strong class="lastro-group-title" data-custom-title>添加自定义地点</strong><p class="lastro-help">保存后可在本区服的角色之间使用；“前往”会检查地图后再请求传送。</p>
+        <label class="lastro-line">地点名称<input name="name" maxlength="80" placeholder="可选，默认使用地图和坐标" autocomplete="off"></label>
+        <label class="lastro-line">备注<input name="desc" maxlength="200" placeholder="可选" autocomplete="off"></label>
+        <div class="lastro-custom-map-row"><label class="lastro-line">地图名<input name="map" required maxlength="20" placeholder="prontera" autocomplete="off"></label><button type="button" class="lastro-button" data-custom-action data-read-current-location>读取当前位置</button></div>
+        <div class="lastro-custom-coordinates"><label class="lastro-line">X 坐标<input name="x" type="number" required min="0" max="65535" step="1"></label><label class="lastro-line">Y 坐标<input name="y" type="number" required min="0" max="65535" step="1"></label></div>
+        <div class="lastro-custom-buttons"><button type="button" class="lastro-button" data-custom-action data-save-place>保存地点</button><button type="submit" class="lastro-button" data-custom-action>前往</button><button type="button" class="lastro-button" data-custom-action data-cancel-edit hidden>取消编辑</button></div>
+      </form>
+      <ul class="lastro-route-list" aria-label="传送地点列表"></ul><div class="lastro-route-footer"><button type="button" class="lastro-button" data-reset-order>恢复默认顺序</button></div>
+    </div><div class="lastro-status" role="status" aria-live="polite"></div></div></div>`;
   const renderTeleport = teleport.render;
   teleport.render = () => renderTeleport().replace(/<\/div>$/, `${resizeFooter('传送地点')}</div>`);
   teleport.init = function () {
@@ -472,28 +784,29 @@ export function installLastroToolsPanels(tools, deps, css, presetRoutes = {}) {
         select(categories[next][0]); root.querySelector(`[data-category="${selected}"]`).focus();
       });
     });
-    root.querySelector('[data-reset-order]').addEventListener('click', () => { stopDrag(true); delete preferences.orders[selected]; renderList(); save(); });
+    root.querySelector('[data-reset-order]').addEventListener('click', resetOrder);
+    root.querySelector('[data-save-place]').addEventListener('click', saveCustomPlace);
+    root.querySelector('[data-add-place]').addEventListener('click', openCustomEditor);
+    root.querySelector('[data-read-current-location]').addEventListener('click', readCurrentLocation);
+    root.querySelector('[data-search-routes]').addEventListener('input', event => updateSearch(event.currentTarget.value));
+    root.querySelector('[data-clear-route-search]').addEventListener('click', () => { updateSearch(''); root.querySelector('[data-search-routes]').focus(); });
+    root.querySelector('[data-cancel-edit]').addEventListener('click', clearCustomEditor);
     root.querySelector('[data-custom-form]').addEventListener('submit', event => {
       event.preventDefault();
-      const form = event.currentTarget;
-      const map = form.elements.namedItem('map').value.trim().toLowerCase().replace(/\.gat$/i, '');
-      const coordinate = name => {
-        const text = form.elements.namedItem(name).value.trim(), value = Number(text);
-        if (!/^\d{1,5}$/.test(text) || value > 65535) throw new Error('坐标必须为 0–65535 的整数');
-        return value;
-      };
+      if (savingCustom) return;
       try {
-        if (!/^[a-z0-9_@#-]{1,16}$/.test(map)) throw new Error('请输入有效地图名');
-        const destination = [map, coordinate('x'), coordinate('y')];
-        go({ npc: `${map} ${destination[1]},${destination[2]}`, desc: '', outset: destination, path: [destination] });
+        go(customRoute(placeFromForm()));
       } catch (error) { status.textContent = error.message; }
     });
     list.addEventListener('pointerdown', event => {
       const handle = event.target.closest('[data-sort-handle]');
-      if (!handle || (event.button !== 0 && event.button !== -1) || drag) return;
+      if (!handle || !sortingAllowed() || (event.button !== 0 && event.button !== -1) || drag) return;
       event.preventDefault(); event.stopPropagation();
       const node = handle.closest('[data-route-id]');
-      drag = { node, handle, pointerId: event.pointerId, startY: event.clientY, y: event.clientY, moved: false, order: [...list.children].map(row => row.dataset.routeId) };
+      cancelSortAnimations();
+      drag = { node, handle, pointerId: event.pointerId, startY: event.clientY, y: event.clientY, startTop: node.getBoundingClientRect().top,
+        scaleY: panelMeasurements(teleport._host).scaleY, moved: false, order: [...list.children].map(row => row.dataset.routeId) };
+      node.classList.add('is-dragging');
       // Capture on the stationary list: moving a captured row loses capture in Chromium.
       try { list.setPointerCapture?.(event.pointerId); } catch { /* Synthetic/test events have no active pointer. */ }
       handle.setAttribute('aria-grabbed', 'true'); autoScroll();
@@ -502,18 +815,25 @@ export function installLastroToolsPanels(tools, deps, css, presetRoutes = {}) {
       if (!drag || drag.pointerId !== event.pointerId) return;
       drag.y = event.clientY;
       if (Math.abs(drag.y - drag.startY) >= 4) drag.moved = true;
-      if (drag.moved) { event.preventDefault(); drag.node.classList.add('is-dragging'); moveAtPointer(); }
+      if (drag.moved) { event.preventDefault(); drag.node.classList.add('is-drag-moving'); moveAtPointer(); followDragPointer(); }
     });
     list.addEventListener('pointerup', event => { if (drag?.pointerId === event.pointerId) stopDrag(); });
     list.addEventListener('pointercancel', () => stopDrag(true));
     list.addEventListener('lostpointercapture', () => stopDrag(true));
     renderList();
   };
-  teleport.onRemove = () => { if (resizing?.component === teleport) stopPanelResize(true, false); stopDrag(true); cancelConfirmation(); cancelPendingRequest(); stopListeningIfInactive(); };
+  teleport.onRemove = () => { if (resizing?.component === teleport) stopPanelResize(true, false); stopDrag(true); cancelConfirmation(); cancelPendingRequest(); clearCustomEditor(); stopListeningIfInactive(); };
   teleport.onAppend = () => { tools.hidePanel(); listenForResize(); fitPanel(teleport, 'teleport', 34); };
   UIManager.addComponent(teleport);
   tools._lastroPanels = {
     teleport, showAutomation, showTeleport, select, ordered, catalog,
+    deactivate: () => {
+      stopPanelResize(true, false); stopDrag(true); cancelConfirmation(); cancelPendingRequest(); teleport.remove();
+      dock?.remove(); dock = null; tools._panelOpener = null;
+      if (listeningForResize) { win.removeEventListener('resize', fitPanels); listeningForResize = false; }
+    },
+    refreshEntry: () => { if (tools.__active) { ensureDock(); listenForResize(); if (tools._panelOpener) tools._panelOpener.hidden = false; } },
+    requestCustomRoute: raw => { const route = normalizeRoute(raw); if (route.unavailable) throw new Error(route.unavailableReason || '地点资料暂不可用'); go(route); },
     setStatus: message => { if (status) status.textContent = message; },
     onMapChanging: () => { tools._lastroMapTransition = true; deps.routeMapChanging?.(); },
     cancelRoute: () => { tools._lastroMapTransition = false; cancelConfirmation(); cancelPendingRequest(); deps.cancelRoute?.(); },

@@ -91,6 +91,6 @@ document.getElementById('clear').onclick = () => { stopPlayback(); pickup.onRemo
 burst();
 `);
 writeFileSync('generated/localization-preview.html', `<!doctype html><html lang="zh-CN"><meta charset="utf-8"><title>LASTRO 字体与布局复核</title>
-<style>@font-face{font-family:'Source Han Sans CN';src:url('/core/System/Font/Source%20Han%20Sans%20CN4.otf')}body{margin:0;background:#18202b;color:#e7edf4;font:14px 'Source Han Sans CN',sans-serif}header{padding:20px 40px}h1{font-size:20px;margin:0 0 8px}#shortcut{background:white;color:#222}#notice{color:#222}</style>
+<link rel="stylesheet" href="/fonts/misans.css"><style>body{margin:0;background:#18202b;color:#e7edf4;font:14px Arial,'Microsoft YaHei','MiSans','LastRO Glyph Fallback',sans-serif}header{padding:20px 40px}h1{font-size:20px;margin:0 0 8px}#shortcut{background:white;color:#222}#notice{color:#222}</style>
 <header><h1>LASTRO · 连续拾取提示</h1><div>实际列表逻辑、示例图标。沿用游戏动效与系统的减少动画设置。</div><div style="margin-top:12px;display:flex;flex-wrap:wrap;gap:8px"><button id="play">实时播放动画</button><button id="burst">连续获得 8 种物品</button><button id="merge">再获得红色药水 ×3</button><button id="variant">获得同名 +5 物品</button><button id="step">推进 1 秒</button><button id="fine">推进 0.2 秒</button><button id="expire">推进 5 秒</button><button id="clear">清空</button></div><p id="clock">演示时间：0 秒</p></header><div id="shortcut"></div><div id="notice"></div>
 <script type="module" src="./localization-preview.js"></script></html>`);

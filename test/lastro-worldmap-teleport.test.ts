@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { createLastroWorldMapTeleport } from '../scripts/lastro-worldmap-teleport.mjs';
 
-function fixture() {
+function fixture(withPrompt = false) {
   let map = 'prontera.gat', profile = '6:5';
   const pending: Array<{ resolve(value: { approved: boolean }): void; reject(error: Error): void }> = [];
   const preflight = {
@@ -10,8 +10,15 @@ function fixture() {
   };
   const send = vi.fn<(mapid: string) => void>();
   const onError = vi.fn(), onSameMap = vi.fn();
-  const api = createLastroWorldMapTeleport({ preflight, getMap: () => map, getProfile: () => profile, send, onSameMap, onError });
-  return { api, pending, preflight, send, onSameMap, onError, setMap: (value: string) => { map = value; }, setProfile: (value: string) => { profile = value; } };
+  const prompts: Array<{ message: string; yes(): void; no(): void; popup: { onRemove?: () => void; remove(): void } }> = [];
+  const showPrompt = vi.fn((message: string, yes: () => void, no: () => void) => {
+    const popup = { onRemove: vi.fn(), remove: vi.fn(() => popup.onRemove?.()) };
+    prompts.push({ message, yes, no, popup }); return popup;
+  });
+  const api = createLastroWorldMapTeleport({ preflight, getMap: () => map, getProfile: () => profile, send, onSameMap, onError,
+    ...(withPrompt ? { showPrompt } : {}) });
+  return { api, pending, preflight, send, onSameMap, onError, prompts, showPrompt,
+    setMap: (value: string) => { map = value; }, setProfile: (value: string) => { profile = value; } };
 }
 
 describe('verified world map teleports', () => {
@@ -121,5 +128,46 @@ describe('verified world map teleports', () => {
     const result = f.api.request('ein_fild04'); f.pending[0]!.resolve({ approved: true });
     expect(await result).toBe(false);
     expect(f.onError.mock.calls[0]?.[0]).toMatchObject({ message: 'socket unavailable' });
+  });
+
+  it('shows the chosen display name and starts no resource checks before explicit confirmation', async () => {
+    const f = fixture(true), result = f.api.request(' EIN_FILD04.GAT ', '艾音布罗克原野');
+    expect(f.prompts[0]?.message).toBe('是否传送到艾音布罗克原野？\nein_fild04');
+    expect(f.preflight.check).not.toHaveBeenCalled(); expect(f.send).not.toHaveBeenCalled();
+    f.prompts[0]!.yes(); await Promise.resolve();
+    expect(f.preflight.check).toHaveBeenCalledExactlyOnceWith({ outset: ['ein_fild04', 0, 0] });
+    f.pending[0]!.resolve({ approved: true });
+    expect(await result).toBe(true); expect(f.send).toHaveBeenCalledExactlyOnceWith('ein_fild04');
+  });
+
+  it.each(['cancel', 'remove', 'close'])('does not check or send when confirmation ends by %s', async action => {
+    const f = fixture(true), result = f.api.request('ein_fild04');
+    const prompt = f.prompts[0]!;
+    if (action === 'cancel') prompt.no();
+    if (action === 'remove') prompt.popup.remove();
+    if (action === 'close') f.api.cancelPending();
+    expect(await result).toBe(false);
+    prompt.yes(); await Promise.resolve();
+    expect(f.preflight.check).not.toHaveBeenCalled(); expect(f.send).not.toHaveBeenCalled();
+    expect(f.onError).not.toHaveBeenCalled();
+    if (action === 'close') expect(prompt.popup.remove).toHaveBeenCalledOnce();
+  });
+
+  it.each(['map', 'profile'])('rejects an approval from a previous %s before any resource check', async field => {
+    const f = fixture(true), result = f.api.request('ein_fild04');
+    if (field === 'map') f.setMap('geffen.gat'); else f.setProfile('3:3');
+    f.prompts[0]!.yes();
+    expect(await result).toBe(false);
+    expect(f.preflight.check).not.toHaveBeenCalled(); expect(f.send).not.toHaveBeenCalled();
+    expect(f.onError.mock.calls[0]?.[0]).toMatchObject({ message: '当前地图或区服已变化，请重新选择地点。' });
+  });
+
+  it('retains one confirmation during repeated target clicks', async () => {
+    const f = fixture(true), first = f.api.request('ein_fild04');
+    expect(await f.api.request('payon')).toBe(false);
+    expect(await f.api.request('ein_fild04')).toBe(false);
+    expect(f.showPrompt).toHaveBeenCalledOnce(); expect(f.preflight.check).not.toHaveBeenCalled();
+    f.prompts[0]!.yes(); await Promise.resolve(); f.pending[0]!.resolve({ approved: true });
+    expect(await first).toBe(true); expect(f.send).toHaveBeenCalledExactlyOnceWith('ein_fild04');
   });
 });

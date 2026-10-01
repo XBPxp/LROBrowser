@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { readFile } from 'node:fs/promises';
+import { readFile, readdir } from 'node:fs/promises';
 import { describe, expect, it } from 'vitest';
 
 describe('Phase A IWA', () => {
@@ -32,16 +32,25 @@ describe('Phase A IWA', () => {
     expect(shell).toContain("title.textContent = 'LRO进阶客户端(Powered by LTSD.Ro)';");
   });
 
-  it('ships the bundled Chinese font files and their license', async () => {
-    const [medium, bold, license] = await Promise.all([
-      readFile('public/fonts/SourceHanSansCN-Medium.otf'),
-      readFile('public/fonts/SourceHanSansCN-Bold.otf'),
+  it('ships compact local Chinese fonts and both upstream licenses', async () => {
+    const [variable, medium, bold, license, miSansLicense, notice] = await Promise.all([
+      readFile('public/fonts/MiSans-VF.woff2'),
+      readFile('public/fonts/LastROGlyphFallback-Medium.woff2'),
+      readFile('public/fonts/LastROGlyphFallback-Bold.woff2'),
       readFile('public/fonts/OFL.txt', 'utf8'),
+      readFile('public/fonts/MiSans-LICENSE.pdf'),
+      readFile('public/fonts/NOTICE.txt', 'utf8'),
     ]);
-    expect(medium.byteLength).toBeGreaterThan(8_000_000);
-    expect(bold.byteLength).toBeGreaterThan(8_000_000);
+    for (const font of [variable, medium, bold]) expect(font.toString('ascii', 0, 4)).toBe('wOF2');
+    expect(variable.byteLength + medium.byteLength + bold.byteLength).toBeLessThan(12 * 1024 * 1024);
+    expect((await readdir('public/fonts')).filter(name => /\.(?:woff2?|otf|ttf)$/i.test(name)).sort()).toEqual([
+      'LastROGlyphFallback-Bold.woff2', 'LastROGlyphFallback-Medium.woff2', 'MiSans-VF.woff2',
+    ]);
     expect(license).toContain('SIL OPEN FONT LICENSE');
     expect(license).toContain('Version 1.1');
+    expect(miSansLicense.toString('ascii', 0, 5)).toBe('%PDF-');
+    expect(notice).toContain('MiSans');
+    expect(notice).toContain('LastRO Glyph Fallback');
   });
 
 });

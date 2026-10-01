@@ -1,4 +1,4 @@
-export interface ChatMapDestination { mapname: string; x: number; y: number; }
+export interface ChatMapDestination { mapname: string; x: number; y: number; mapOnly?: true; }
 export interface ChatMapPrompt {
   onRemove?: (...args: unknown[]) => unknown;
 }

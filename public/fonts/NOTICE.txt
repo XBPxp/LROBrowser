@@ -1,7 +1,5 @@
 The client uses MiSans fonts, Copyright Xiaomi Inc.
-MiSans Regular, Medium and Bold are unmodified official WOFF2 files.
-Source: https://hyperos.mi.com/font/zh/download/
 License: MiSans-LICENSE.pdf
 
-Source Han Sans CN fallback fonts: Copyright Adobe.
+LastRO Glyph Fallback: Copyright Adobe.
 License: OFL.txt

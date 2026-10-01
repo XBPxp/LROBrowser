@@ -35,7 +35,8 @@ function fixture(files = resources(), aliases: Record<string, string> = {}) {
     if (manual) pending.push(complete); else queueMicrotask(complete);
   } }, { mapalias: aliases }, state, { get: () => profile }, { CZ: { PRIVATE_AIRSHIP_REQUEST: class {} } },
   { sendPacket: (packet: unknown) => packets.push(packet) }, buildPrivateAirshipRequest, (map: string) => map.replace(/\.gat$/i, ''),
-  { showErrorBox: popup }, { warn: () => {} }, describeLastroMapLoadFailure);
+  { showErrorBox: popup, showPromptBox: (_message: string, _yes: string, _no: string, approve: () => void) => { approve(); return {}; } },
+  { warn: () => {} }, describeLastroMapLoadFailure);
   return { api, packets, reads, popup, state, pending, manual: () => { manual = true; }, setProfile: () => { profile++; } };
 }
 

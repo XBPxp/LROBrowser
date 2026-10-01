@@ -1,6 +1,6 @@
 /** Self-contained: serialized into the packaged native runtime. */
 export function installLastroQuestUI(deps) {
-const FONT = "Arial,'Microsoft YaHei','MiSans','Source Han Sans CN',sans-serif";
+const FONT = "Arial,'Microsoft YaHei','MiSans','LastRO Glyph Fallback',sans-serif";
 const LIST_STYLE = `
 :host{font-family:${FONT};font-size:12px;font-weight:400;font-size-adjust:none}
 .lastro-quest-track{position:absolute;right:3px;top:14px;margin:0;width:14px;height:14px;cursor:pointer}

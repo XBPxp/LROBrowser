@@ -44,7 +44,7 @@ export const ITEM_OBTAIN_CSS = `
   border: 0;
   border-radius: 0;
   background: transparent;
-  font-family: 'MiSans', 'Source Han Sans CN', sans-serif;
+  font-family: Arial, 'Microsoft YaHei', 'MiSans', 'LastRO Glyph Fallback', sans-serif;
   font-size: var(--loot-font, 14px);
   font-size-adjust: none;
   line-height: 1.4;

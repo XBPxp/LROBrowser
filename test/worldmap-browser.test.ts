@@ -45,7 +45,7 @@ function mount(loadData = vi.fn(async () => data), itemTable: Record<number, { i
   const host = document.createElement('div'); if (prepared) document.body.append(host);
   const root = host.attachShadow({ mode: 'open' }); root.innerHTML = `<style>${commonCss}</style><style>${fixture.css}</style><div class="ui-component-root">${fixture.html}</div>`;
   const component = { _host: host, getRoot: () => root, prepare: vi.fn(() => { component.init(); host.remove(); }), append: vi.fn(() => { document.body.append(host); component.onAppend(); }), focus: vi.fn(), searchMonster: async (_target: unknown) => { void _target; }, init: () => {}, onAppend: () => {}, toggle: () => {}, onRemove: () => {}, onResize: () => {}, updatePartyMembers: (_pkt: unknown) => { void _pkt; } };
-  const navigate = vi.fn(), teleport = vi.fn<(mapid: string) => void | Promise<boolean>>(), cancelTeleport = vi.fn();
+  const navigate = vi.fn(), teleport = vi.fn<(mapid: string, label?: string) => void | Promise<boolean>>(), cancelTeleport = vi.fn();
   const Client = { loadFile: vi.fn((_path: string, _done: (url: string) => void, fail?: () => void) => fail?.()) };
   const api = runInNewContext(`(${fixture.installLastroWorldMap})(component,deps,regions,(${fixture.createWorldMapIndex}))`, {
     component, regions: fixture.regions,
@@ -640,9 +640,9 @@ describe('packaged official-style world map', () => {
     expect(f.root.querySelector('input')?.value).toBe('波利');
     expect(f.root.querySelectorAll('.wm-inspector')).toHaveLength(0);
   });
-  it('keeps synchronous void teleport adapters compatible for the selected floor without extra confirmation', async () => {
+  it('passes the selected floor label to the teleport adapter and keeps synchronous adapters compatible', async () => {
     const f = mount(); await f.api.open({ kind: 'map', id: 'test_dun' }); f.click('传送到此地图');
-    expect(f.teleport).toHaveBeenCalledExactlyOnceWith('test_dun');
+    expect(f.teleport).toHaveBeenCalledExactlyOnceWith('test_dun', '测试地下城');
     await flush();
     expect(f.root.querySelector<HTMLElement>('.wm-panel')?.hidden).toBe(true);
   });

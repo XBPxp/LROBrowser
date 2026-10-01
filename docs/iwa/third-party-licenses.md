@@ -14,8 +14,8 @@
 | 世界地图图片 | `public/worldmap/` | 220 张图片的下载来源及 SHA-256 记录于 `public/worldmap/sources.json`；独立再分发证据待核验 |
 | 游戏 Lua/LUB | `vendor/core/System` 和 `vendor/core/data/luafiles514/lua files` | 覆盖脚本的独立再分发证据待核验 |
 | Lua/WASM 运行时 | 尚未进入 Task 7 定位步骤 | 组件、版本、许可证与打包方式均待核验 |
-| Source Han Sans CN | `vendor/core/System/Font/Source Han Sans CN{4,6}.otf` 及 `public/fonts/SourceHanSansCN-{Medium,Bold}.otf` | SIL Open Font License 1.1；许可证副本为 `vendor/core/System/Font/OFL.txt` 和 `public/fonts/OFL.txt` |
-| MiSans Regular、Medium、Bold | 小米官方下载的原始 WOFF2，位于 `public/fonts/` | 字体版权说明及许可副本为 `public/fonts/NOTICE.txt`、`public/fonts/MiSans-LICENSE.pdf`；来源与文件 SHA-256 见 `docs/iwa/fonts.md`，与字体一同打包 |
+| LastRO Glyph Fallback Medium、Bold | `public/fonts/LastROGlyphFallback-{Medium,Bold}.woff2` | SIL Open Font License 1.1；许可证副本为 `public/fonts/OFL.txt` |
+| MiSans VF | `public/fonts/MiSans-VF.woff2` | 版权和许可文件为 `public/fonts/NOTICE.txt`、`public/fonts/MiSans-LICENSE.pdf` |
 
 用户在后续指令中明确允许暂不处理分发许可，继续本机运行和调用。因此 Phase A 的本机私有构建和测试签名不再因许可证据缺失而阻塞。源文件固定保存在仓库的 `vendor/` 目录；`generated`、`dist`、`release` 和本地测试密钥仍是被 Git 忽略的构建或测试产物。此授权不包含公开源码、上传 bundle 或部署。
 

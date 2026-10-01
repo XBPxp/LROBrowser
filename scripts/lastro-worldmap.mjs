@@ -65,7 +65,7 @@ export const WORLD_MAP_HTML = '<div id="WorldMap"><div class="wm-canvas" aria-la
 export const WORLD_MAP_CSS = `
 :host{position:fixed!important;inset:0;width:100vw;height:100vh;display:block;overflow:hidden}
 .ui-component-root{position:absolute;inset:0;min-width:0;min-height:0;overflow:hidden}
-#WorldMap{position:absolute;inset:0;overflow:hidden;background:#1b2423;color:#f1f0e9;font:13px/1.5 Arial,'Microsoft YaHei','MiSans','Source Han Sans CN',sans-serif;font-size-adjust:none;isolation:isolate}
+#WorldMap{position:absolute;inset:0;overflow:hidden;background:#1b2423;color:#f1f0e9;font:13px/1.5 Arial,'Microsoft YaHei','MiSans','LastRO Glyph Fallback',sans-serif;font-size-adjust:none;isolation:isolate}
 #WorldMap *{box-sizing:border-box}#WorldMap [hidden]{display:none!important}
 #WorldMap button,#WorldMap select,#WorldMap input{font:inherit;color:inherit}
 #WorldMap button{cursor:pointer}#WorldMap button:focus-visible,#WorldMap select:focus-visible,#WorldMap input:focus-visible{outline:2px solid #e1cf8f;outline-offset:2px}
@@ -360,7 +360,7 @@ export function installLastroWorldMap(component, deps, regions, makeIndex) {
         const ticket = generation;
         teleport.disabled = true;
         try {
-          const result = await deps.teleport(map.id);
+          const result = await deps.teleport(map.id, map.name);
           // Older synchronous adapters return void after sending successfully.
           if (result !== false && alive && ticket === generation) hide();
         } catch { /* The adapter reports failures; keep the selected map for retry. */ }

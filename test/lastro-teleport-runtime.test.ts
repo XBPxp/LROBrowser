@@ -39,7 +39,10 @@ function fixture(files = resources(), aliases: Record<string, string> = {}) {
   const mapRenderer = { currentMap: 'izlude.gat', loading: false };
   const actor = { position: [0, 0] };
   const navigation = { __loaded: true, show: vi.fn(), clear: vi.fn(), navigateTo: vi.fn() };
-  const tools = { _lastroPanels: { setStatus: vi.fn() }, _lastroTeleportRejected: undefined as undefined | ((message: string) => void) };
+  // The runtime captures the native GUI lifecycle before installing either view.
+  // This resource-gate fixture does not append the component or render its UI.
+  const tools = { render: vi.fn(() => ''), init: vi.fn(),
+    _lastroPanels: { setStatus: vi.fn() }, _lastroTeleportRejected: undefined as undefined | ((message: string) => void) };
   let autoComplete = true;
   const thread = { send: (type: string, input: { filename: string }, callback: (bytes: ArrayBuffer | null, error?: string) => void) => {
     expect(type).toBe('GET_FILE'); events.push(input.filename);

@@ -12,6 +12,59 @@
   "unavailableProfiles": [
     "6"
   ],
+  "upstreamCatalog": {
+    "repository": "https://github.com/parkerjj/LROBrowser",
+    "version": "0.1.11",
+    "tag": "iwa-11",
+    "commit": "8251745549a676983fdf7d5c5835af923260744b",
+    "sourceFiles": {
+      "vendor/v2/Online.js": {
+        "sha256": "9d8cbd73b52dc37b25d136d7c21ea59f157dc3dedffdd9d31bfc5d2e9f8f5b7b",
+        "catalogPath": "LastROTools._defaultQuickRoutes"
+      },
+      "vendor/v2/lastro-quick-teleport-catalog.mjs": {
+        "sha256": "d35f992252bcdd8f120c5158f6cbc9423d0e30258af2f71e93d68f1f546c6fe9",
+        "catalogPath": "PARADISE_GROUP_QUICK_ROUTE / QUICK_TELEPORT_CAVE_ROUTES"
+      }
+    },
+    "sourceCategoryCounts": {
+      "guide": 72,
+      "train": 74,
+      "wild": 13
+    },
+    "sourceRouteCount": 159,
+    "customRouteCount": 150,
+    "npcCoordinateMappings": {
+      "5": {
+        "1": "guide:pronteraKafra",
+        "3": "guide:para",
+        "6": "guide:prtItemShop",
+        "7": "guide:equipmentShop",
+        "8": "guide:equipmentShop",
+        "9": "guide:event",
+        "11": "guide:bounty",
+        "12": "guide:prtItemShop",
+        "13": "guide:hoklian",
+        "15": "guide:hoklian",
+        "16": "guide:hoklian",
+        "19": "guide:mercenary",
+        "20": "guide:pet",
+        "25": "guide:equipmentShop"
+      }
+    },
+    "excludedCustomRouteKeys": [
+      "guide:pronteraKafra",
+      "guide:para",
+      "guide:prtItemShop",
+      "guide:equipmentShop",
+      "guide:event",
+      "guide:bounty",
+      "guide:hoklian",
+      "guide:mercenary",
+      "guide:pet"
+    ],
+    "coordinatePolicy": "Use matching 0.1.11 service entry points for profile 5 outset; preserve existing indoor navigation paths and other server profiles. Keep all other upstream quick routes in custom."
+  },
   "profiles": {
     "3": {
       "npc": {
@@ -2428,8 +2481,8 @@
           "desc": "存储服务、仓库服务、手推车租赁服务",
           "outset": [
             "prontera",
-            116,
-            72
+            149,
+            89
           ],
           "breakpoint": false,
           "path": [
@@ -2469,8 +2522,8 @@
           "desc": "多人副本、单人副本和MVP副本",
           "outset": [
             "moc_para01",
-            30,
-            14
+            27,
+            30
           ],
           "breakpoint": false,
           "path": [
@@ -2505,8 +2558,8 @@
           "desc": "购买或出售道具",
           "outset": [
             "prontera",
-            156,
-            182
+            134,
+            220
           ],
           "breakpoint": false,
           "path": [
@@ -2528,8 +2581,8 @@
           "desc": "购买日常练级武器",
           "outset": [
             "prontera",
-            156,
-            182
+            175,
+            220
           ],
           "breakpoint": false,
           "path": [
@@ -2551,8 +2604,8 @@
           "desc": "购买日常练级防具",
           "outset": [
             "prontera",
-            156,
-            182
+            175,
+            220
           ],
           "breakpoint": false,
           "path": [
@@ -2574,8 +2627,8 @@
           "desc": "抽奖活动，抽完即止",
           "outset": [
             "prontera",
-            156,
-            117
+            152,
+            129
           ],
           "breakpoint": false,
           "path": [
@@ -2592,8 +2645,8 @@
           "desc": "完成赏金任务，可以获得游戏币和商城点券",
           "outset": [
             "prontera",
-            116,
-            72
+            156,
+            117
           ],
           "breakpoint": false,
           "path": [
@@ -2610,8 +2663,8 @@
           "desc": "装备鉴定、装备回收",
           "outset": [
             "prontera",
-            156,
-            182
+            134,
+            220
           ],
           "breakpoint": false,
           "path": [
@@ -2633,8 +2686,8 @@
           "desc": "武器每精炼一级，武器攻击力增加5~10",
           "outset": [
             "prontera",
-            156,
-            182
+            178,
+            185
           ],
           "breakpoint": false,
           "path": [
@@ -2656,8 +2709,8 @@
           "desc": "重铸装备，使装备附加更强大的属性词条",
           "outset": [
             "prontera",
-            156,
-            182
+            178,
+            185
           ],
           "breakpoint": false,
           "path": [
@@ -2679,8 +2732,8 @@
           "desc": "可以卸载装备上的卡片",
           "outset": [
             "prontera",
-            156,
-            182
+            178,
+            185
           ],
           "breakpoint": false,
           "path": [
@@ -2725,8 +2778,8 @@
           "desc": "佣兵签约业务",
           "outset": [
             "prontera",
-            52,
-            339
+            43,
+            336
           ],
           "breakpoint": false,
           "path": [
@@ -2743,8 +2796,8 @@
           "desc": "出售宠物补给道具",
           "outset": [
             "prontera",
-            156,
-            182
+            218,
+            207
           ],
           "breakpoint": false,
           "path": [
@@ -2779,8 +2832,8 @@
           "desc": "制作可爱头饰",
           "outset": [
             "prontera",
-            172,
-            217
+            175,
+            220
           ],
           "breakpoint": false,
           "path": [
@@ -4727,6 +4780,3679 @@
       "challenge": {},
       "instance": {},
       "boss": {}
+    }
+  },
+  "upstreamCustomRoutes": {
+    "upstream:guide:treasureHunt": {
+      "group": "首都功能服务",
+      "npc": "⭐挖宝任务",
+      "desc": "赏金任务 · pay_fild11 125,175",
+      "outset": [
+        "pay_fild11",
+        125,
+        175
+      ],
+      "path": [
+        [
+          "pay_fild11",
+          125,
+          175
+        ]
+      ],
+      "breakpoint": false,
+      "position": []
+    },
+    "upstream:guide:pronteraCenter": {
+      "group": "首都功能服务",
+      "npc": "首都中央花坛",
+      "desc": "首都中心 · prontera 156,182",
+      "outset": [
+        "prontera",
+        156,
+        182
+      ],
+      "path": [
+        [
+          "prontera",
+          156,
+          182
+        ]
+      ],
+      "breakpoint": false,
+      "position": []
+    },
+    "upstream:guide:cooking": {
+      "group": "首都功能服务",
+      "npc": "料理材料商人",
+      "desc": "料理材料 · prontera 156,212",
+      "outset": [
+        "prontera",
+        156,
+        212
+      ],
+      "path": [
+        [
+          "prontera",
+          156,
+          212
+        ]
+      ],
+      "breakpoint": false,
+      "position": []
+    },
+    "upstream:guide:gift": {
+      "group": "首都功能服务",
+      "npc": "礼品商人",
+      "desc": "礼品道具 · prontera 105,87",
+      "outset": [
+        "prontera",
+        105,
+        87
+      ],
+      "path": [
+        [
+          "prontera",
+          105,
+          87
+        ]
+      ],
+      "breakpoint": false,
+      "position": []
+    },
+    "upstream:guide:milk": {
+      "group": "首都功能服务",
+      "npc": "牛奶商人",
+      "desc": "恢复品 · prontera 73,134",
+      "outset": [
+        "prontera",
+        73,
+        134
+      ],
+      "path": [
+        [
+          "prontera",
+          73,
+          134
+        ]
+      ],
+      "breakpoint": false,
+      "position": []
+    },
+    "upstream:guide:fruit": {
+      "group": "首都功能服务",
+      "npc": "水果商人",
+      "desc": "水果恢复品 · prontera 104,49",
+      "outset": [
+        "prontera",
+        104,
+        49
+      ],
+      "path": [
+        [
+          "prontera",
+          104,
+          49
+        ]
+      ],
+      "breakpoint": false,
+      "position": []
+    },
+    "upstream:guide:church": {
+      "group": "首都功能服务",
+      "npc": "教堂入口",
+      "desc": "传到教堂外 · prontera 236,315",
+      "outset": [
+        "prontera",
+        236,
+        315
+      ],
+      "path": [
+        [
+          "prontera",
+          236,
+          315
+        ]
+      ],
+      "breakpoint": false,
+      "position": []
+    },
+    "upstream:guide:geffenHub": {
+      "group": "城市与交通枢纽",
+      "npc": "吉芬",
+      "desc": "geffen 132,66",
+      "outset": [
+        "geffen",
+        132,
+        66
+      ],
+      "path": [
+        [
+          "geffen",
+          132,
+          66
+        ]
+      ],
+      "breakpoint": false,
+      "position": []
+    },
+    "upstream:guide:payonHub": {
+      "group": "城市与交通枢纽",
+      "npc": "斐扬",
+      "desc": "payon 177,111",
+      "outset": [
+        "payon",
+        177,
+        111
+      ],
+      "path": [
+        [
+          "payon",
+          177,
+          111
+        ]
+      ],
+      "breakpoint": false,
+      "position": []
+    },
+    "upstream:guide:moroccHub": {
+      "group": "城市与交通枢纽",
+      "npc": "梦罗克",
+      "desc": "morocc 161,97",
+      "outset": [
+        "morocc",
+        161,
+        97
+      ],
+      "path": [
+        [
+          "morocc",
+          161,
+          97
+        ]
+      ],
+      "breakpoint": false,
+      "position": []
+    },
+    "upstream:guide:mocRuinsHub": {
+      "group": "城市与交通枢纽",
+      "npc": "金字塔遗迹",
+      "desc": "moc_ruins 68,164",
+      "outset": [
+        "moc_ruins",
+        68,
+        164
+      ],
+      "path": [
+        [
+          "moc_ruins",
+          68,
+          164
+        ]
+      ],
+      "breakpoint": false,
+      "position": []
+    },
+    "upstream:guide:albertaHub": {
+      "group": "城市与交通枢纽",
+      "npc": "艾尔贝塔",
+      "desc": "alberta 124,67",
+      "outset": [
+        "alberta",
+        124,
+        67
+      ],
+      "path": [
+        [
+          "alberta",
+          124,
+          67
+        ]
+      ],
+      "breakpoint": false,
+      "position": []
+    },
+    "upstream:guide:aldebaranHub": {
+      "group": "城市与交通枢纽",
+      "npc": "艾尔帕兰",
+      "desc": "aldebaran 133,119",
+      "outset": [
+        "aldebaran",
+        133,
+        119
+      ],
+      "path": [
+        [
+          "aldebaran",
+          133,
+          119
+        ]
+      ],
+      "breakpoint": false,
+      "position": []
+    },
+    "upstream:guide:yunoHub": {
+      "group": "城市与交通枢纽",
+      "npc": "朱诺",
+      "desc": "yuno 144,189",
+      "outset": [
+        "yuno",
+        144,
+        189
+      ],
+      "path": [
+        [
+          "yuno",
+          144,
+          189
+        ]
+      ],
+      "breakpoint": false,
+      "position": []
+    },
+    "upstream:guide:einbrochHub": {
+      "group": "城市与交通枢纽",
+      "npc": "艾音布罗克",
+      "desc": "einbroch 244,200",
+      "outset": [
+        "einbroch",
+        244,
+        200
+      ],
+      "path": [
+        [
+          "einbroch",
+          244,
+          200
+        ]
+      ],
+      "breakpoint": false,
+      "position": []
+    },
+    "upstream:guide:lighthalzenHub": {
+      "group": "城市与交通枢纽",
+      "npc": "里希塔乐镇",
+      "desc": "lighthalzen 164,86",
+      "outset": [
+        "lighthalzen",
+        164,
+        86
+      ],
+      "path": [
+        [
+          "lighthalzen",
+          164,
+          86
+        ]
+      ],
+      "breakpoint": false,
+      "position": []
+    },
+    "upstream:guide:rachelHub": {
+      "group": "城市与交通枢纽",
+      "npc": "拉赫",
+      "desc": "rachel 125,144",
+      "outset": [
+        "rachel",
+        125,
+        144
+      ],
+      "path": [
+        [
+          "rachel",
+          125,
+          144
+        ]
+      ],
+      "breakpoint": false,
+      "position": []
+    },
+    "upstream:guide:veinsHub": {
+      "group": "城市与交通枢纽",
+      "npc": "伯仁斯",
+      "desc": "veins 220,109",
+      "outset": [
+        "veins",
+        220,
+        109
+      ],
+      "path": [
+        [
+          "veins",
+          220,
+          109
+        ]
+      ],
+      "breakpoint": false,
+      "position": []
+    },
+    "upstream:guide:hugelHub": {
+      "group": "城市与交通枢纽",
+      "npc": "毁葛",
+      "desc": "hugel 93,153",
+      "outset": [
+        "hugel",
+        93,
+        153
+      ],
+      "path": [
+        [
+          "hugel",
+          93,
+          153
+        ]
+      ],
+      "breakpoint": false,
+      "position": []
+    },
+    "upstream:guide:comodoHub": {
+      "group": "城市与交通枢纽",
+      "npc": "克魔岛",
+      "desc": "comodo 202,151",
+      "outset": [
+        "comodo",
+        202,
+        151
+      ],
+      "path": [
+        [
+          "comodo",
+          202,
+          151
+        ]
+      ],
+      "breakpoint": false,
+      "position": []
+    },
+    "upstream:guide:umbalaHub": {
+      "group": "城市与交通枢纽",
+      "npc": "汶巴拉",
+      "desc": "umbala 105,158",
+      "outset": [
+        "umbala",
+        105,
+        158
+      ],
+      "path": [
+        [
+          "umbala",
+          105,
+          158
+        ]
+      ],
+      "breakpoint": false,
+      "position": []
+    },
+    "upstream:guide:amatsuHub": {
+      "group": "城市与交通枢纽",
+      "npc": "天津町",
+      "desc": "amatsu 100,145",
+      "outset": [
+        "amatsu",
+        100,
+        145
+      ],
+      "path": [
+        [
+          "amatsu",
+          100,
+          145
+        ]
+      ],
+      "breakpoint": false,
+      "position": []
+    },
+    "upstream:guide:ayothayaHub": {
+      "group": "城市与交通枢纽",
+      "npc": "哎哟泰雅",
+      "desc": "ayothaya 221,191",
+      "outset": [
+        "ayothaya",
+        221,
+        191
+      ],
+      "path": [
+        [
+          "ayothaya",
+          221,
+          191
+        ]
+      ],
+      "breakpoint": false,
+      "position": []
+    },
+    "upstream:guide:louyangHub": {
+      "group": "城市与交通枢纽",
+      "npc": "龙之城",
+      "desc": "louyang 224,107",
+      "outset": [
+        "louyang",
+        224,
+        107
+      ],
+      "path": [
+        [
+          "louyang",
+          224,
+          107
+        ]
+      ],
+      "breakpoint": false,
+      "position": []
+    },
+    "upstream:guide:gonryunHub": {
+      "group": "城市与交通枢纽",
+      "npc": "昆仑",
+      "desc": "gonryun 162,122",
+      "outset": [
+        "gonryun",
+        162,
+        122
+      ],
+      "path": [
+        [
+          "gonryun",
+          162,
+          122
+        ]
+      ],
+      "breakpoint": false,
+      "position": []
+    },
+    "upstream:guide:moscoviaHub": {
+      "group": "城市与交通枢纽",
+      "npc": "莫斯科比亚",
+      "desc": "moscovia 209,197",
+      "outset": [
+        "moscovia",
+        209,
+        197
+      ],
+      "path": [
+        [
+          "moscovia",
+          209,
+          197
+        ]
+      ],
+      "breakpoint": false,
+      "position": []
+    },
+    "upstream:guide:brasilisHub": {
+      "group": "城市与交通枢纽",
+      "npc": "巴西",
+      "desc": "brasilis 191,224",
+      "outset": [
+        "brasilis",
+        191,
+        224
+      ],
+      "path": [
+        [
+          "brasilis",
+          191,
+          224
+        ]
+      ],
+      "breakpoint": false,
+      "position": []
+    },
+    "upstream:guide:dewataHub": {
+      "group": "城市与交通枢纽",
+      "npc": "德瓦他",
+      "desc": "dewata 192,193",
+      "outset": [
+        "dewata",
+        192,
+        193
+      ],
+      "path": [
+        [
+          "dewata",
+          192,
+          193
+        ]
+      ],
+      "breakpoint": false,
+      "position": []
+    },
+    "upstream:guide:malayaHub": {
+      "group": "城市与交通枢纽",
+      "npc": "马来港",
+      "desc": "malaya 225,218",
+      "outset": [
+        "malaya",
+        225,
+        218
+      ],
+      "path": [
+        [
+          "malaya",
+          225,
+          218
+        ]
+      ],
+      "breakpoint": false,
+      "position": []
+    },
+    "upstream:guide:payonSupply": {
+      "group": "各地室外商人",
+      "npc": "斐扬道具/药剂商人",
+      "desc": "payon 158,96",
+      "outset": [
+        "payon",
+        158,
+        96
+      ],
+      "path": [
+        [
+          "payon",
+          158,
+          96
+        ]
+      ],
+      "breakpoint": false,
+      "position": []
+    },
+    "upstream:guide:payonPet": {
+      "group": "各地室外商人",
+      "npc": "斐扬宠物商人",
+      "desc": "payon 177,131",
+      "outset": [
+        "payon",
+        177,
+        131
+      ],
+      "path": [
+        [
+          "payon",
+          177,
+          131
+        ]
+      ],
+      "breakpoint": false,
+      "position": []
+    },
+    "upstream:guide:geffenPet": {
+      "group": "各地室外商人",
+      "npc": "吉芬宠物商人",
+      "desc": "geffen 193,152",
+      "outset": [
+        "geffen",
+        193,
+        152
+      ],
+      "path": [
+        [
+          "geffen",
+          193,
+          152
+        ]
+      ],
+      "breakpoint": false,
+      "position": []
+    },
+    "upstream:guide:geffenCooking": {
+      "group": "各地室外商人",
+      "npc": "吉芬料理商人",
+      "desc": "geffen 196,111",
+      "outset": [
+        "geffen",
+        196,
+        111
+      ],
+      "path": [
+        [
+          "geffen",
+          196,
+          111
+        ]
+      ],
+      "breakpoint": false,
+      "position": []
+    },
+    "upstream:guide:moroccItem": {
+      "group": "各地室外商人",
+      "npc": "梦罗克道具商人",
+      "desc": "morocc 146,103",
+      "outset": [
+        "morocc",
+        146,
+        103
+      ],
+      "path": [
+        [
+          "morocc",
+          146,
+          103
+        ]
+      ],
+      "breakpoint": false,
+      "position": []
+    },
+    "upstream:guide:moroccPet": {
+      "group": "各地室外商人",
+      "npc": "梦罗克宠物商人",
+      "desc": "morocc 203,87",
+      "outset": [
+        "morocc",
+        203,
+        87
+      ],
+      "path": [
+        [
+          "morocc",
+          203,
+          87
+        ]
+      ],
+      "breakpoint": false,
+      "position": []
+    },
+    "upstream:guide:mocRuinsItem": {
+      "group": "各地室外商人",
+      "npc": "金字塔遗迹道具商人",
+      "desc": "moc_ruins 91,128",
+      "outset": [
+        "moc_ruins",
+        91,
+        128
+      ],
+      "path": [
+        [
+          "moc_ruins",
+          91,
+          128
+        ]
+      ],
+      "breakpoint": false,
+      "position": []
+    },
+    "upstream:guide:poisonMaterial": {
+      "group": "各地室外商人",
+      "npc": "毒药材料商",
+      "desc": "moc_ruins 60,160",
+      "outset": [
+        "moc_ruins",
+        60,
+        160
+      ],
+      "path": [
+        [
+          "moc_ruins",
+          60,
+          160
+        ]
+      ],
+      "breakpoint": false,
+      "position": []
+    },
+    "upstream:guide:albertaCooking": {
+      "group": "各地室外商人",
+      "npc": "艾尔贝塔料理商人",
+      "desc": "alberta 167,135",
+      "outset": [
+        "alberta",
+        167,
+        135
+      ],
+      "path": [
+        [
+          "alberta",
+          167,
+          135
+        ]
+      ],
+      "breakpoint": false,
+      "position": []
+    },
+    "upstream:guide:yunoItem": {
+      "group": "各地室外商人",
+      "npc": "朱诺道具商人",
+      "desc": "yuno 218,97",
+      "outset": [
+        "yuno",
+        218,
+        97
+      ],
+      "path": [
+        [
+          "yuno",
+          218,
+          97
+        ]
+      ],
+      "breakpoint": false,
+      "position": []
+    },
+    "upstream:guide:yunoPet": {
+      "group": "各地室外商人",
+      "npc": "朱诺宠物商人",
+      "desc": "yuno 197,114",
+      "outset": [
+        "yuno",
+        197,
+        114
+      ],
+      "path": [
+        [
+          "yuno",
+          197,
+          114
+        ]
+      ],
+      "breakpoint": false,
+      "position": []
+    },
+    "upstream:guide:yunoMagic": {
+      "group": "各地室外商人",
+      "npc": "朱诺魔法商人",
+      "desc": "yuno 163,187",
+      "outset": [
+        "yuno",
+        163,
+        187
+      ],
+      "path": [
+        [
+          "yuno",
+          163,
+          187
+        ]
+      ],
+      "breakpoint": false,
+      "position": []
+    },
+    "upstream:guide:einbrochGeneral": {
+      "group": "各地室外商人",
+      "npc": "艾音布罗克杂货商",
+      "desc": "einbroch 82,199",
+      "outset": [
+        "einbroch",
+        82,
+        199
+      ],
+      "path": [
+        [
+          "einbroch",
+          82,
+          199
+        ]
+      ],
+      "breakpoint": false,
+      "position": []
+    },
+    "upstream:guide:lighthalzenPet": {
+      "group": "各地室外商人",
+      "npc": "里希塔乐镇宠物商",
+      "desc": "lighthalzen 222,191",
+      "outset": [
+        "lighthalzen",
+        222,
+        191
+      ],
+      "path": [
+        [
+          "lighthalzen",
+          222,
+          191
+        ]
+      ],
+      "breakpoint": false,
+      "position": []
+    },
+    "upstream:guide:lighthalzenCooking": {
+      "group": "各地室外商人",
+      "npc": "里希塔乐镇料理商",
+      "desc": "lighthalzen 126,126",
+      "outset": [
+        "lighthalzen",
+        126,
+        126
+      ],
+      "path": [
+        [
+          "lighthalzen",
+          126,
+          126
+        ]
+      ],
+      "breakpoint": false,
+      "position": []
+    },
+    "upstream:guide:gonryunItem": {
+      "group": "各地室外商人",
+      "npc": "昆仑道具商人",
+      "desc": "gonryun 147,84",
+      "outset": [
+        "gonryun",
+        147,
+        84
+      ],
+      "path": [
+        [
+          "gonryun",
+          147,
+          84
+        ]
+      ],
+      "breakpoint": false,
+      "position": []
+    },
+    "upstream:guide:gonryunWeapon": {
+      "group": "各地室外商人",
+      "npc": "昆仑武器商人",
+      "desc": "gonryun 174,101",
+      "outset": [
+        "gonryun",
+        174,
+        101
+      ],
+      "path": [
+        [
+          "gonryun",
+          174,
+          101
+        ]
+      ],
+      "breakpoint": false,
+      "position": []
+    },
+    "upstream:guide:gonryunArmor": {
+      "group": "各地室外商人",
+      "npc": "昆仑防具商人",
+      "desc": "gonryun 173,84",
+      "outset": [
+        "gonryun",
+        173,
+        84
+      ],
+      "path": [
+        [
+          "gonryun",
+          173,
+          84
+        ]
+      ],
+      "breakpoint": false,
+      "position": []
+    },
+    "upstream:guide:dewataItem": {
+      "group": "各地室外商人",
+      "npc": "德瓦他道具商人",
+      "desc": "dewata 182,164",
+      "outset": [
+        "dewata",
+        182,
+        164
+      ],
+      "path": [
+        [
+          "dewata",
+          182,
+          164
+        ]
+      ],
+      "breakpoint": false,
+      "position": []
+    },
+    "upstream:guide:dewataWeapon": {
+      "group": "各地室外商人",
+      "npc": "德瓦他武器商人",
+      "desc": "dewata 218,164",
+      "outset": [
+        "dewata",
+        218,
+        164
+      ],
+      "path": [
+        [
+          "dewata",
+          218,
+          164
+        ]
+      ],
+      "breakpoint": false,
+      "position": []
+    },
+    "upstream:guide:dewataArmor": {
+      "group": "各地室外商人",
+      "npc": "德瓦他防具商人",
+      "desc": "dewata 158,182",
+      "outset": [
+        "dewata",
+        158,
+        182
+      ],
+      "path": [
+        [
+          "dewata",
+          158,
+          182
+        ]
+      ],
+      "breakpoint": false,
+      "position": []
+    },
+    "upstream:guide:comodoCooking": {
+      "group": "各地室外商人",
+      "npc": "克魔岛料理商人",
+      "desc": "comodo 225,164",
+      "outset": [
+        "comodo",
+        225,
+        164
+      ],
+      "path": [
+        [
+          "comodo",
+          225,
+          164
+        ]
+      ],
+      "breakpoint": false,
+      "position": []
+    },
+    "upstream:guide:moscoviaFruit": {
+      "group": "各地室外商人",
+      "npc": "莫斯科比亚水果商",
+      "desc": "moscovia 152,71",
+      "outset": [
+        "moscovia",
+        152,
+        71
+      ],
+      "path": [
+        [
+          "moscovia",
+          152,
+          71
+        ]
+      ],
+      "breakpoint": false,
+      "position": []
+    },
+    "upstream:guide:hugelGroceries": {
+      "group": "各地室外商人",
+      "npc": "毁葛杂货区",
+      "desc": "hugel 89,167",
+      "outset": [
+        "hugel",
+        89,
+        167
+      ],
+      "path": [
+        [
+          "hugel",
+          89,
+          167
+        ]
+      ],
+      "breakpoint": false,
+      "position": []
+    },
+    "upstream:guide:lostMermaid": {
+      "group": "任务NPC",
+      "npc": "走失的美人鱼",
+      "desc": "十点方向水池内 · comodo 87,242",
+      "outset": [
+        "comodo",
+        87,
+        242
+      ],
+      "path": [
+        [
+          "comodo",
+          87,
+          242
+        ]
+      ],
+      "breakpoint": false,
+      "position": []
+    },
+    "upstream:guide:lostPeco": {
+      "group": "任务NPC",
+      "npc": "走失的大嘴鸟",
+      "desc": "北门 · geffen 116,201",
+      "outset": [
+        "geffen",
+        116,
+        201
+      ],
+      "path": [
+        [
+          "geffen",
+          116,
+          201
+        ]
+      ],
+      "breakpoint": false,
+      "position": []
+    },
+    "upstream:guide:lostHen": {
+      "group": "任务NPC",
+      "npc": "走失的老母鸡",
+      "desc": "西门 · morocc 29,158",
+      "outset": [
+        "morocc",
+        29,
+        158
+      ],
+      "path": [
+        [
+          "morocc",
+          29,
+          158
+        ]
+      ],
+      "breakpoint": false,
+      "position": []
+    },
+    "upstream:guide:lostPoring": {
+      "group": "任务NPC",
+      "npc": "走失的波利",
+      "desc": "北门往下牌坊 · prontera 155,284",
+      "outset": [
+        "prontera",
+        155,
+        284
+      ],
+      "path": [
+        [
+          "prontera",
+          155,
+          284
+        ]
+      ],
+      "breakpoint": false,
+      "position": []
+    },
+    "upstream:guide:lostBlackCat": {
+      "group": "任务NPC",
+      "npc": "走失的黑喵",
+      "desc": "OX答题右下方 · izlude 134,102",
+      "outset": [
+        "izlude",
+        134,
+        102
+      ],
+      "path": [
+        [
+          "izlude",
+          134,
+          102
+        ]
+      ],
+      "breakpoint": false,
+      "position": []
+    },
+    "upstream:guide:lostGrandma": {
+      "group": "任务NPC",
+      "npc": "走失的老奶奶",
+      "desc": "宠物商人旁边 · payon 171,134",
+      "outset": [
+        "payon",
+        171,
+        134
+      ],
+      "path": [
+        [
+          "payon",
+          171,
+          134
+        ]
+      ],
+      "breakpoint": false,
+      "position": []
+    },
+    "upstream:guide:lostGirlfriend": {
+      "group": "任务NPC",
+      "npc": "走失的女朋友",
+      "desc": "海底洞窟入口上方 · izlu2dun 103,115",
+      "outset": [
+        "izlu2dun",
+        103,
+        115
+      ],
+      "path": [
+        [
+          "izlu2dun",
+          103,
+          115
+        ]
+      ],
+      "breakpoint": false,
+      "position": []
+    },
+    "upstream:guide:lostCalico": {
+      "group": "任务NPC",
+      "npc": "走失的花斑猫",
+      "desc": "十一点方向路灯下 · alberta 114,222",
+      "outset": [
+        "alberta",
+        114,
+        222
+      ],
+      "path": [
+        [
+          "alberta",
+          114,
+          222
+        ]
+      ],
+      "breakpoint": false,
+      "position": []
+    },
+    "upstream:guide:lostAdventurer": {
+      "group": "任务NPC",
+      "npc": "迷路的冒险家",
+      "desc": "地图中间，盗贼工会入口 · moc_pryd01 90,112",
+      "outset": [
+        "moc_pryd01",
+        90,
+        112
+      ],
+      "path": [
+        [
+          "moc_pryd01",
+          90,
+          112
+        ]
+      ],
+      "breakpoint": false,
+      "position": []
+    },
+    "upstream:guide:lostLad": {
+      "group": "任务NPC",
+      "npc": "迷路的帅小伙",
+      "desc": "十二点方向玩具工厂入口 · xmas 148,307",
+      "outset": [
+        "xmas",
+        148,
+        307
+      ],
+      "path": [
+        [
+          "xmas",
+          148,
+          307
+        ]
+      ],
+      "breakpoint": false,
+      "position": []
+    },
+    "upstream:train:pronteraSewers": {
+      "group": "经典地下城",
+      "npc": "普隆德拉地下水道",
+      "desc": "入口 · 主怪：吸血蝙蝠 Lv24、盗虫卵 Lv20 · prt_fild05 271,210",
+      "outset": [
+        "prt_fild05",
+        271,
+        210
+      ],
+      "path": [
+        [
+          "prt_fild05",
+          271,
+          210
+        ]
+      ],
+      "monsterMap": "prt_sewb1",
+      "monsters": [
+        {
+          "id": 1005,
+          "name": "吸血蝙蝠",
+          "level": 24
+        },
+        {
+          "id": 1048,
+          "name": "盗虫卵",
+          "level": 20
+        }
+      ],
+      "breakpoint": false,
+      "position": []
+    },
+    "upstream:train:mazeForest": {
+      "group": "经典地下城",
+      "npc": "迷藏森林",
+      "desc": "入口 · 主怪：流浪之狼 Lv93、艾吉欧蜈蚣 Lv75 · prt_fild01 136,373",
+      "outset": [
+        "prt_fild01",
+        136,
+        373
+      ],
+      "path": [
+        [
+          "prt_fild01",
+          136,
+          373
+        ]
+      ],
+      "monsterMap": "prt_maze01",
+      "monsters": [
+        {
+          "id": 1092,
+          "name": "流浪之狼",
+          "level": 93
+        },
+        {
+          "id": 1099,
+          "name": "艾吉欧蜈蚣",
+          "level": 75
+        }
+      ],
+      "breakpoint": false,
+      "position": []
+    },
+    "upstream:train:payonCave": {
+      "group": "经典地下城",
+      "npc": "斐扬洞窟",
+      "desc": "入口 · 主怪：转转蛋 Lv53、邪骸弓箭手 Lv50 · pay_arche 36,131",
+      "outset": [
+        "pay_arche",
+        36,
+        131
+      ],
+      "path": [
+        [
+          "pay_arche",
+          36,
+          131
+        ]
+      ],
+      "monsterMap": "pay_dun01",
+      "monsters": [
+        {
+          "id": 1116,
+          "name": "转转蛋",
+          "level": 53
+        },
+        {
+          "id": 1016,
+          "name": "邪骸弓箭手",
+          "level": 50
+        }
+      ],
+      "breakpoint": false,
+      "position": []
+    },
+    "upstream:train:geffenDungeon": {
+      "group": "经典地下城",
+      "npc": "吉芬地下密穴",
+      "desc": "入口 · 主怪：赤苍蝇 Lv63、愤怒赤苍蝇 Lv63 · geffen 120,114",
+      "outset": [
+        "geffen",
+        120,
+        114
+      ],
+      "path": [
+        [
+          "geffen",
+          120,
+          114
+        ]
+      ],
+      "monsterMap": "gef_dun00",
+      "monsters": [
+        {
+          "id": 1035,
+          "name": "赤苍蝇",
+          "level": 63
+        },
+        {
+          "id": 2797,
+          "name": "愤怒赤苍蝇",
+          "level": 63
+        }
+      ],
+      "breakpoint": false,
+      "position": []
+    },
+    "upstream:train:mjolnirMine": {
+      "group": "经典地下城",
+      "npc": "妙勒尼废弃矿场",
+      "desc": "入口 · 主怪：土拨鼠 Lv39、吸血蝙蝠 Lv24 · mjolnir_02 79,365",
+      "outset": [
+        "mjolnir_02",
+        79,
+        365
+      ],
+      "path": [
+        [
+          "mjolnir_02",
+          79,
+          365
+        ]
+      ],
+      "monsterMap": "mjo_dun01",
+      "monsters": [
+        {
+          "id": 1145,
+          "name": "土拨鼠",
+          "level": 39
+        },
+        {
+          "id": 1005,
+          "name": "吸血蝙蝠",
+          "level": 24
+        }
+      ],
+      "breakpoint": false,
+      "position": []
+    },
+    "upstream:train:clockTower": {
+      "group": "经典地下城",
+      "npc": "钟塔",
+      "desc": "入口 · 主怪：钟塔守护者 Lv90、巫婆 Lv86 · aldebaran 139,135",
+      "outset": [
+        "aldebaran",
+        139,
+        135
+      ],
+      "path": [
+        [
+          "aldebaran",
+          139,
+          135
+        ]
+      ],
+      "monsterMap": "c_tower1",
+      "monsters": [
+        {
+          "id": 1270,
+          "name": "钟塔守护者",
+          "level": 90
+        },
+        {
+          "id": 1102,
+          "name": "巫婆",
+          "level": 86
+        }
+      ],
+      "breakpoint": false,
+      "position": []
+    },
+    "upstream:train:clockTowerBasement": {
+      "group": "经典地下城",
+      "npc": "钟塔地下",
+      "desc": "入口 · 主怪：卷甲虫 Lv107、菁英卷甲虫 Lv107 · alde_dun01 125,22",
+      "outset": [
+        "alde_dun01",
+        125,
+        22
+      ],
+      "path": [
+        [
+          "alde_dun01",
+          125,
+          22
+        ]
+      ],
+      "monsterMap": "alde_dun01",
+      "monsters": [
+        {
+          "id": 1194,
+          "name": "卷甲虫",
+          "level": 107
+        },
+        {
+          "id": 2894,
+          "name": "菁英卷甲虫",
+          "level": 107
+        }
+      ],
+      "breakpoint": false,
+      "position": []
+    },
+    "upstream:train:toyFactory": {
+      "group": "经典地下城",
+      "npc": "玩具工厂",
+      "desc": "入口 · 主怪：天使波利 Lv77、波利之王 Lv42 · xmas 143,314",
+      "outset": [
+        "xmas",
+        143,
+        314
+      ],
+      "path": [
+        [
+          "xmas",
+          143,
+          314
+        ]
+      ],
+      "monsterMap": "xmas_dun01",
+      "monsters": [
+        {
+          "id": 1096,
+          "name": "天使波利",
+          "level": 77
+        },
+        {
+          "id": 1090,
+          "name": "波利之王",
+          "level": 42
+        }
+      ],
+      "breakpoint": false,
+      "position": []
+    },
+    "upstream:train:pyramid": {
+      "group": "经典地下城",
+      "npc": "金字塔迷宫",
+      "desc": "入口 · 主怪：波波利 Lv30、吸血蝙蝠 Lv24 · moc_ruins 54,161",
+      "outset": [
+        "moc_ruins",
+        54,
+        161
+      ],
+      "path": [
+        [
+          "moc_ruins",
+          54,
+          161
+        ]
+      ],
+      "monsterMap": "moc_pryd01",
+      "monsters": [
+        {
+          "id": 1031,
+          "name": "波波利",
+          "level": 30
+        },
+        {
+          "id": 1005,
+          "name": "吸血蝙蝠",
+          "level": 24
+        }
+      ],
+      "breakpoint": false,
+      "position": []
+    },
+    "upstream:train:sphinx": {
+      "group": "经典地下城",
+      "npc": "史芬克斯密穴",
+      "desc": "入口 · 主怪：诺可伊 Lv71、杰洛米 Lv70 · moc_fild19 98,99",
+      "outset": [
+        "moc_fild19",
+        98,
+        99
+      ],
+      "path": [
+        [
+          "moc_fild19",
+          98,
+          99
+        ]
+      ],
+      "monsterMap": "in_sphinx1",
+      "monsters": [
+        {
+          "id": 1164,
+          "name": "诺可伊",
+          "level": 71
+        },
+        {
+          "id": 1178,
+          "name": "杰洛米",
+          "level": 70
+        }
+      ],
+      "breakpoint": false,
+      "position": []
+    },
+    "upstream:train:antHell": {
+      "group": "经典地下城",
+      "npc": "蚂蚁地狱",
+      "desc": "入口 · 主怪：基尔瑟 Lv42、黑蚁 Lv35 · cmd_fild08 329,352",
+      "outset": [
+        "cmd_fild08",
+        329,
+        352
+      ],
+      "path": [
+        [
+          "cmd_fild08",
+          329,
+          352
+        ]
+      ],
+      "monsterMap": "anthell01",
+      "monsters": [
+        {
+          "id": 1121,
+          "name": "基尔瑟",
+          "level": 42
+        },
+        {
+          "id": 1176,
+          "name": "黑蚁",
+          "level": 35
+        }
+      ],
+      "breakpoint": false,
+      "position": []
+    },
+    "upstream:train:orcsDungeon": {
+      "group": "经典地下城",
+      "npc": "兽人地下洞窟",
+      "desc": "入口 · 主怪：邪骸兽人 Lv53、兽人腐尸 Lv51 · gef_fild10 63,337",
+      "outset": [
+        "gef_fild10",
+        63,
+        337
+      ],
+      "path": [
+        [
+          "gef_fild10",
+          63,
+          337
+        ]
+      ],
+      "monsterMap": "orcsdun01",
+      "monsters": [
+        {
+          "id": 1152,
+          "name": "邪骸兽人",
+          "level": 53
+        },
+        {
+          "id": 1153,
+          "name": "兽人腐尸",
+          "level": 51
+        }
+      ],
+      "breakpoint": false,
+      "position": []
+    },
+    "upstream:train:byalan": {
+      "group": "经典地下城",
+      "npc": "海底洞窟",
+      "desc": "入口 · 主怪：螃蟹 Lv45、库克雷 Lv42 · izlu2dun 108,83",
+      "outset": [
+        "izlu2dun",
+        108,
+        83
+      ],
+      "path": [
+        [
+          "izlu2dun",
+          108,
+          83
+        ]
+      ],
+      "monsterMap": "iz_dun00",
+      "monsters": [
+        {
+          "id": 1066,
+          "name": "螃蟹",
+          "level": 45
+        },
+        {
+          "id": 1070,
+          "name": "库克雷",
+          "level": 42
+        }
+      ],
+      "breakpoint": false,
+      "position": []
+    },
+    "upstream:train:sunkenShip": {
+      "group": "经典地下城",
+      "npc": "沉没之船",
+      "desc": "船夫 · 入口 · 主怪：邪骸海盗 Lv48、白幽灵 Lv46 · alb2trea 85,107",
+      "outset": [
+        "alb2trea",
+        85,
+        107
+      ],
+      "path": [
+        [
+          "alb2trea",
+          85,
+          107
+        ]
+      ],
+      "monsterMap": "treasure01",
+      "monsters": [
+        {
+          "id": 1071,
+          "name": "邪骸海盗",
+          "level": 48
+        },
+        {
+          "id": 1179,
+          "name": "白幽灵",
+          "level": 46
+        }
+      ],
+      "breakpoint": false,
+      "position": []
+    },
+    "upstream:train:comodoNorth": {
+      "group": "经典地下城",
+      "npc": "克魔岛北边洞穴·卢安达",
+      "desc": "入口 · 主怪：奈利虫 Lv98、钟乳巨石怪 Lv68 · comodo 176,358",
+      "outset": [
+        "comodo",
+        176,
+        358
+      ],
+      "path": [
+        [
+          "comodo",
+          176,
+          358
+        ]
+      ],
+      "monsterMap": "beach_dun2",
+      "monsters": [
+        {
+          "id": 1255,
+          "name": "奈利虫",
+          "level": 98
+        },
+        {
+          "id": 1278,
+          "name": "钟乳巨石怪",
+          "level": 68
+        }
+      ],
+      "breakpoint": false,
+      "position": []
+    },
+    "upstream:train:comodoWest": {
+      "group": "经典地下城",
+      "npc": "克魔岛西边洞穴·加露",
+      "desc": "入口 · 主怪：塔奥群卡 Lv110、米杜沙 Lv102 · comodo 24,214",
+      "outset": [
+        "comodo",
+        24,
+        214
+      ],
+      "path": [
+        [
+          "comodo",
+          24,
+          214
+        ]
+      ],
+      "monsterMap": "beach_dun",
+      "monsters": [
+        {
+          "id": 1583,
+          "name": "塔奥群卡",
+          "level": 110
+        },
+        {
+          "id": 1148,
+          "name": "米杜沙",
+          "level": 102
+        }
+      ],
+      "breakpoint": false,
+      "position": []
+    },
+    "upstream:train:comodoEast": {
+      "group": "经典地下城",
+      "npc": "克魔岛东边洞穴·马吾",
+      "desc": "入口 · 主怪：奈利虫 Lv98、邪骸食人鱼 Lv46 · comodo 333,175",
+      "outset": [
+        "comodo",
+        333,
+        175
+      ],
+      "path": [
+        [
+          "comodo",
+          333,
+          175
+        ]
+      ],
+      "monsterMap": "beach_dun3",
+      "monsters": [
+        {
+          "id": 1255,
+          "name": "奈利虫",
+          "level": 98
+        },
+        {
+          "id": 1064,
+          "name": "邪骸食人鱼",
+          "level": 46
+        }
+      ],
+      "breakpoint": false,
+      "position": []
+    },
+    "upstream:train:turtleIsland": {
+      "group": "经典地下城",
+      "npc": "乌龟岛",
+      "desc": "入口 · 主怪：果树龟 Lv90、单眼虫 Lv89 · tur_dun01 154,241",
+      "outset": [
+        "tur_dun01",
+        154,
+        241
+      ],
+      "path": [
+        [
+          "tur_dun01",
+          154,
+          241
+        ]
+      ],
+      "monsterMap": "tur_dun01",
+      "monsters": [
+        {
+          "id": 1314,
+          "name": "果树龟",
+          "level": 90
+        },
+        {
+          "id": 1256,
+          "name": "单眼虫",
+          "level": 89
+        }
+      ],
+      "breakpoint": false,
+      "position": []
+    },
+    "upstream:train:glastHeim": {
+      "group": "经典地下城",
+      "npc": "古城",
+      "desc": "入口 · 主怪：鹗枭男爵 Lv120、卡拉特小丑 Lv103 · glast_01 200,297",
+      "outset": [
+        "glast_01",
+        200,
+        297
+      ],
+      "path": [
+        [
+          "glast_01",
+          200,
+          297
+        ]
+      ],
+      "monsterMap": "gl_cas01",
+      "monsters": [
+        {
+          "id": 1295,
+          "name": "鹗枭男爵",
+          "level": 120
+        },
+        {
+          "id": 1267,
+          "name": "卡拉特小丑",
+          "level": 103
+        }
+      ],
+      "breakpoint": false,
+      "position": []
+    },
+    "upstream:train:glastHeimAbyss": {
+      "group": "经典地下城",
+      "npc": "古城深渊",
+      "desc": "入口 · 主怪：越狱腐尸 Lv186、冰冻蝙蝠弓箭手 Lv186 · gl_cas01_ 20,20",
+      "outset": [
+        "gl_cas01_",
+        20,
+        20
+      ],
+      "path": [
+        [
+          "gl_cas01_",
+          20,
+          20
+        ]
+      ],
+      "monsterMap": "gl_cas01_",
+      "monsters": [
+        {
+          "id": 20371,
+          "name": "越狱腐尸",
+          "level": 186
+        },
+        {
+          "id": 20369,
+          "name": "冰冻蝙蝠弓箭手",
+          "level": 186
+        }
+      ],
+      "breakpoint": false,
+      "position": []
+    },
+    "upstream:train:gefenia": {
+      "group": "经典地下城",
+      "npc": "葛帔尼亚",
+      "desc": "任务前置 · 入口 · 主怪：弑神者 Lv130、深渊骑士 Lv122 · gefenia01 37,103",
+      "outset": [
+        "gefenia01",
+        37,
+        103
+      ],
+      "path": [
+        [
+          "gefenia01",
+          37,
+          103
+        ]
+      ],
+      "monsterMap": "gefenia01",
+      "monsters": [
+        {
+          "id": 1203,
+          "name": "弑神者",
+          "level": 130
+        },
+        {
+          "id": 1219,
+          "name": "深渊骑士",
+          "level": 122
+        }
+      ],
+      "breakpoint": false,
+      "position": []
+    },
+    "upstream:train:amatsuDungeon": {
+      "group": "经典地下城",
+      "npc": "天津町地下神社",
+      "desc": "入口 · 主怪：火忍西怒毕 Lv95、武士火枪兵 Lv88 · ama_dun01 232,144",
+      "outset": [
+        "ama_dun01",
+        232,
+        144
+      ],
+      "path": [
+        [
+          "ama_dun01",
+          232,
+          144
+        ]
+      ],
+      "monsterMap": "ama_dun01",
+      "monsters": [
+        {
+          "id": 1401,
+          "name": "火忍西怒毕",
+          "level": 95
+        },
+        {
+          "id": 1403,
+          "name": "武士火枪兵",
+          "level": 88
+        }
+      ],
+      "breakpoint": false,
+      "position": []
+    },
+    "upstream:train:kunlunDungeon": {
+      "group": "经典地下城",
+      "npc": "昆仑神殿",
+      "desc": "入口 · 主怪：血蝴蝶 Lv94、迅捷血蝴蝶 Lv94 · gonryun 159,201",
+      "outset": [
+        "gonryun",
+        159,
+        201
+      ],
+      "path": [
+        [
+          "gonryun",
+          159,
+          201
+        ]
+      ],
+      "monsterMap": "gon_dun01",
+      "monsters": [
+        {
+          "id": 1408,
+          "name": "血蝴蝶",
+          "level": 94
+        },
+        {
+          "id": 2883,
+          "name": "迅捷血蝴蝶",
+          "level": 94
+        }
+      ],
+      "breakpoint": false,
+      "position": []
+    },
+    "upstream:train:louyangDungeon": {
+      "group": "经典地下城",
+      "npc": "龙之城王陵",
+      "desc": "入口 · 主怪：狂暴大脚熊 Lv118、米糕 Lv83 · louyang 37,271",
+      "outset": [
+        "louyang",
+        37,
+        271
+      ],
+      "path": [
+        [
+          "louyang",
+          37,
+          271
+        ]
+      ],
+      "monsterMap": "lou_dun01",
+      "monsters": [
+        {
+          "id": 1306,
+          "name": "狂暴大脚熊",
+          "level": 118
+        },
+        {
+          "id": 1516,
+          "name": "米糕",
+          "level": 83
+        }
+      ],
+      "breakpoint": false,
+      "position": []
+    },
+    "upstream:train:ayothayaDungeon": {
+      "group": "经典地下城",
+      "npc": "哎哟泰雅古代神殿",
+      "desc": "入口 · 主怪：克莱本 Lv70、群叶猫 Lv64 · ayo_dun01 275,18",
+      "outset": [
+        "ayo_dun01",
+        275,
+        18
+      ],
+      "path": [
+        [
+          "ayo_dun01",
+          275,
+          18
+        ]
+      ],
+      "monsterMap": "ayo_dun01",
+      "monsters": [
+        {
+          "id": 1587,
+          "name": "克莱本",
+          "level": 70
+        },
+        {
+          "id": 1586,
+          "name": "群叶猫",
+          "level": 64
+        }
+      ],
+      "breakpoint": false,
+      "position": []
+    },
+    "upstream:train:moscoviaDungeon": {
+      "group": "经典地下城",
+      "npc": "莫斯科比亚森林洞窟",
+      "desc": "入口 · 主怪：雷斯 Lv82、枯树精 Lv81 · mosk_dun01 189,45",
+      "outset": [
+        "mosk_dun01",
+        189,
+        45
+      ],
+      "path": [
+        [
+          "mosk_dun01",
+          189,
+          45
+        ]
+      ],
+      "monsterMap": "mosk_dun01",
+      "monsters": [
+        {
+          "id": 1881,
+          "name": "雷斯",
+          "level": 82
+        },
+        {
+          "id": 1880,
+          "name": "枯树精",
+          "level": 81
+        }
+      ],
+      "breakpoint": false,
+      "position": []
+    },
+    "upstream:train:niflheimDungeon": {
+      "group": "经典地下城",
+      "npc": "尼芙菲姆死者之城",
+      "desc": "任务前置 · 入口 · 主怪：Gan Ceann Lv215、Brutal Murderer Lv214 · niflheim 149,124",
+      "outset": [
+        "niflheim",
+        149,
+        124
+      ],
+      "path": [
+        [
+          "niflheim",
+          149,
+          124
+        ]
+      ],
+      "monsterMap": "nif_dun01",
+      "monsters": [
+        {
+          "id": 20935,
+          "name": "Gan Ceann",
+          "level": 215
+        },
+        {
+          "id": 20937,
+          "name": "Brutal Murderer",
+          "level": 214
+        }
+      ],
+      "breakpoint": false,
+      "position": []
+    },
+    "upstream:train:yggdrasil": {
+      "group": "经典地下城",
+      "npc": "天地树叶树干",
+      "desc": "入口 · 主怪：光芒草 Lv1、蓝草 Lv1 · yggdrasil01 249,262",
+      "outset": [
+        "yggdrasil01",
+        249,
+        262
+      ],
+      "path": [
+        [
+          "yggdrasil01",
+          249,
+          262
+        ]
+      ],
+      "monsterMap": "yggdrasil01",
+      "monsters": [
+        {
+          "id": 1083,
+          "name": "光芒草",
+          "level": 1
+        },
+        {
+          "id": 1079,
+          "name": "蓝草",
+          "level": 1
+        }
+      ],
+      "breakpoint": false,
+      "position": []
+    },
+    "upstream:train:abyssLake": {
+      "group": "地区与扩展地下城",
+      "npc": "深渊湖水洞穴",
+      "desc": "入口 · 主怪：红贝勒斯 Lv126、绿贝勒斯 Lv126 · abyss_01 25,30",
+      "outset": [
+        "abyss_01",
+        25,
+        30
+      ],
+      "path": [
+        [
+          "abyss_01",
+          25,
+          30
+        ]
+      ],
+      "monsterMap": "abyss_01",
+      "monsters": [
+        {
+          "id": 1714,
+          "name": "红贝勒斯",
+          "level": 126
+        },
+        {
+          "id": 1717,
+          "name": "绿贝勒斯",
+          "level": 126
+        }
+      ],
+      "breakpoint": false,
+      "position": []
+    },
+    "upstream:train:iceDungeon": {
+      "group": "地区与扩展地下城",
+      "npc": "冰洞窟",
+      "desc": "入口 · 主怪：寒冰雕像 Lv106、邪恶噬人花 Lv105 · ra_fild01 233,333",
+      "outset": [
+        "ra_fild01",
+        233,
+        333
+      ],
+      "path": [
+        [
+          "ra_fild01",
+          233,
+          333
+        ]
+      ],
+      "monsterMap": "ice_dun01",
+      "monsters": [
+        {
+          "id": 1778,
+          "name": "寒冰雕像",
+          "level": 106
+        },
+        {
+          "id": 1780,
+          "name": "邪恶噬人花",
+          "level": 105
+        }
+      ],
+      "breakpoint": false,
+      "position": []
+    },
+    "upstream:train:noggRoad": {
+      "group": "地区与扩展地下城",
+      "npc": "诺可罗德洞窟",
+      "desc": "入口 · 主怪：熔岩巨石 Lv103、火焰妖 Lv101 · yuno_fild03 32,139",
+      "outset": [
+        "yuno_fild03",
+        32,
+        139
+      ],
+      "path": [
+        [
+          "yuno_fild03",
+          32,
+          139
+        ]
+      ],
+      "monsterMap": "mag_dun01",
+      "monsters": [
+        {
+          "id": 1366,
+          "name": "熔岩巨石",
+          "level": 103
+        },
+        {
+          "id": 1367,
+          "name": "火焰妖",
+          "level": 101
+        }
+      ],
+      "breakpoint": false,
+      "position": []
+    },
+    "upstream:train:einbechMine": {
+      "group": "地区与扩展地下城",
+      "npc": "艾音贝赫矿山",
+      "desc": "入口 · 主怪：温古力安特 Lv94、废铁暖炉 Lv92 · einbech 138,252",
+      "outset": [
+        "einbech",
+        138,
+        252
+      ],
+      "path": [
+        [
+          "einbech",
+          138,
+          252
+        ]
+      ],
+      "monsterMap": "ein_dun01",
+      "monsters": [
+        {
+          "id": 1618,
+          "name": "温古力安特",
+          "level": 94
+        },
+        {
+          "id": 1617,
+          "name": "废铁暖炉",
+          "level": 92
+        }
+      ],
+      "breakpoint": false,
+      "position": []
+    },
+    "upstream:train:juperos": {
+      "group": "地区与扩展地下城",
+      "npc": "优配擂斯废墟",
+      "desc": "入口 · 主怪：暴风迪靡克 Lv116、冰冻迪靡克 Lv116 · yuno_fild07 207,175",
+      "outset": [
+        "yuno_fild07",
+        207,
+        175
+      ],
+      "path": [
+        [
+          "yuno_fild07",
+          207,
+          175
+        ]
+      ],
+      "monsterMap": "juperos_01",
+      "monsters": [
+        {
+          "id": 1670,
+          "name": "暴风迪靡克",
+          "level": 116
+        },
+        {
+          "id": 1671,
+          "name": "冰冻迪靡克",
+          "level": 116
+        }
+      ],
+      "breakpoint": false,
+      "position": []
+    },
+    "upstream:train:kielDungeon": {
+      "group": "地区与扩展地下城",
+      "npc": "机械娃娃工厂",
+      "desc": "任务前置 · 入口 · 主怪：爱丽削 Lv115、爱丽俄 Lv112 · kh_dun01 13,12",
+      "outset": [
+        "kh_dun01",
+        13,
+        12
+      ],
+      "path": [
+        [
+          "kh_dun01",
+          13,
+          12
+        ]
+      ],
+      "monsterMap": "kh_dun01",
+      "monsters": [
+        {
+          "id": 1735,
+          "name": "爱丽削",
+          "level": 115
+        },
+        {
+          "id": 1736,
+          "name": "爱丽俄",
+          "level": 112
+        }
+      ],
+      "breakpoint": false,
+      "position": []
+    },
+    "upstream:train:bioLab": {
+      "group": "地区与扩展地下城",
+      "npc": "生命体研究所",
+      "desc": "任务前置 · 入口 · 主怪：暗●剑士 Lv136、暗●弓箭手 Lv135 · lhz_dun01 281,154",
+      "outset": [
+        "lhz_dun01",
+        281,
+        154
+      ],
+      "path": [
+        [
+          "lhz_dun01",
+          281,
+          154
+        ]
+      ],
+      "monsterMap": "lhz_dun01",
+      "monsters": [
+        {
+          "id": 1652,
+          "name": "暗●剑士",
+          "level": 136
+        },
+        {
+          "id": 1656,
+          "name": "暗●弓箭手",
+          "level": 135
+        }
+      ],
+      "breakpoint": false,
+      "position": []
+    },
+    "upstream:train:tombFallen": {
+      "group": "地区与扩展地下城",
+      "npc": "战死者之墓",
+      "desc": "任务前置 · 入口 · 主怪：暗●十字切割者 Lv179、暗●游侠 Lv179 · lhz_dun_n 20,20",
+      "outset": [
+        "lhz_dun_n",
+        20,
+        20
+      ],
+      "path": [
+        [
+          "lhz_dun_n",
+          20,
+          20
+        ]
+      ],
+      "monsterMap": "lhz_dun_n",
+      "monsters": [
+        {
+          "id": 3208,
+          "name": "暗●十字切割者",
+          "level": 179
+        },
+        {
+          "id": 3211,
+          "name": "暗●游侠",
+          "level": 179
+        }
+      ],
+      "breakpoint": false,
+      "position": []
+    },
+    "upstream:train:thorVolcano": {
+      "group": "地区与扩展地下城",
+      "npc": "图尔火山",
+      "desc": "入口 · 主怪：熔岩蜥蜴 Lv138、不死鸟 Lv135 · ve_fild03 168,240",
+      "outset": [
+        "ve_fild03",
+        168,
+        240
+      ],
+      "path": [
+        [
+          "ve_fild03",
+          168,
+          240
+        ]
+      ],
+      "monsterMap": "thor_v01",
+      "monsters": [
+        {
+          "id": 1831,
+          "name": "熔岩蜥蜴",
+          "level": 138
+        },
+        {
+          "id": 1833,
+          "name": "不死鸟",
+          "level": 135
+        }
+      ],
+      "breakpoint": false,
+      "position": []
+    },
+    "upstream:train:rachelSanctuary": {
+      "group": "地区与扩展地下城",
+      "npc": "拉赫神殿圣域",
+      "desc": "任务前置 · 入口 · 主怪：依斯拉 Lv124、凡贝尔克 Lv123 · ra_san01 20,20",
+      "outset": [
+        "ra_san01",
+        20,
+        20
+      ],
+      "path": [
+        [
+          "ra_san01",
+          20,
+          20
+        ]
+      ],
+      "monsterMap": "ra_san01",
+      "monsters": [
+        {
+          "id": 1772,
+          "name": "依斯拉",
+          "level": 124
+        },
+        {
+          "id": 1771,
+          "name": "凡贝尔克",
+          "level": 123
+        }
+      ],
+      "breakpoint": false,
+      "position": []
+    },
+    "upstream:train:thanatosTower": {
+      "group": "地区与扩展地下城",
+      "npc": "达纳托斯之塔",
+      "desc": "任务前置 · 入口 · 主怪：慰劳者 Lv123、绿色等离子体 Lv116 · tha_t01 149,224",
+      "outset": [
+        "tha_t01",
+        149,
+        224
+      ],
+      "path": [
+        [
+          "tha_t01",
+          149,
+          224
+        ]
+      ],
+      "monsterMap": "tha_t01",
+      "monsters": [
+        {
+          "id": 1703,
+          "name": "慰劳者",
+          "level": 123
+        },
+        {
+          "id": 1695,
+          "name": "绿色等离子体",
+          "level": 116
+        }
+      ],
+      "breakpoint": false,
+      "position": []
+    },
+    "upstream:train:odinTemple": {
+      "group": "地区与扩展地下城",
+      "npc": "奥丁神殿",
+      "desc": "入口 · 主怪：彩妆皮影魔 Lv128、皮影魔 Lv126 · odin_tem01 373,182",
+      "outset": [
+        "odin_tem01",
+        373,
+        182
+      ],
+      "path": [
+        [
+          "odin_tem01",
+          373,
+          182
+        ]
+      ],
+      "monsterMap": "odin_tem01",
+      "monsters": [
+        {
+          "id": 1753,
+          "name": "彩妆皮影魔",
+          "level": 128
+        },
+        {
+          "id": 1752,
+          "name": "皮影魔",
+          "level": 126
+        }
+      ],
+      "breakpoint": false,
+      "position": []
+    },
+    "upstream:train:namelessIsland": {
+      "group": "地区与扩展地下城",
+      "npc": "无名岛修道院",
+      "desc": "船夫/任务前置 · 入口 · 主怪：女妖 Lv130、迅捷女妖 Lv130 · nameless_n 157,184",
+      "outset": [
+        "nameless_n",
+        157,
+        184
+      ],
+      "path": [
+        [
+          "nameless_n",
+          157,
+          184
+        ]
+      ],
+      "monsterMap": "abbey01",
+      "monsters": [
+        {
+          "id": 1867,
+          "name": "女妖",
+          "level": 130
+        },
+        {
+          "id": 2887,
+          "name": "迅捷女妖",
+          "level": 130
+        }
+      ],
+      "breakpoint": false,
+      "position": []
+    },
+    "upstream:train:brasilisDungeon": {
+      "group": "地区与扩展地下城",
+      "npc": "巴西瀑布洞穴",
+      "desc": "入口 · 主怪：亚拉 Lv79、食人鱼 Lv75 · bra_dun01 20,20",
+      "outset": [
+        "bra_dun01",
+        20,
+        20
+      ],
+      "path": [
+        [
+          "bra_dun01",
+          20,
+          20
+        ]
+      ],
+      "monsterMap": "bra_dun01",
+      "monsters": [
+        {
+          "id": 2069,
+          "name": "亚拉",
+          "level": 79
+        },
+        {
+          "id": 2070,
+          "name": "食人鱼",
+          "level": 75
+        }
+      ],
+      "breakpoint": false,
+      "position": []
+    },
+    "upstream:train:dewataDungeon": {
+      "group": "地区与扩展地下城",
+      "npc": "德瓦他火山岛",
+      "desc": "入口 · 主怪：狂暴蜈蚣 Lv121、狂暴野猪 Lv120 · dew_dun01 20,20",
+      "outset": [
+        "dew_dun01",
+        20,
+        20
+      ],
+      "path": [
+        [
+          "dew_dun01",
+          20,
+          20
+        ]
+      ],
+      "monsterMap": "dew_dun01",
+      "monsters": [
+        {
+          "id": 1305,
+          "name": "狂暴蜈蚣",
+          "level": 121
+        },
+        {
+          "id": 1311,
+          "name": "狂暴野猪",
+          "level": 120
+        }
+      ],
+      "breakpoint": false,
+      "position": []
+    },
+    "upstream:train:scarabaHole": {
+      "group": "地区与扩展地下城",
+      "npc": "斯卡拉巴洞穴",
+      "desc": "任务前置 · 入口 · 主怪：双角甲虫 Lv134、独角甲虫 Lv130 · dic_fild01 24,79",
+      "outset": [
+        "dic_fild01",
+        24,
+        79
+      ],
+      "path": [
+        [
+          "dic_fild01",
+          24,
+          79
+        ]
+      ],
+      "monsterMap": "dic_dun01",
+      "monsters": [
+        {
+          "id": 2084,
+          "name": "双角甲虫",
+          "level": 134
+        },
+        {
+          "id": 2083,
+          "name": "独角甲虫",
+          "level": 130
+        }
+      ],
+      "breakpoint": false,
+      "position": []
+    },
+    "upstream:train:eclageTower": {
+      "group": "地区与扩展地下城",
+      "npc": "彩虹桥高塔",
+      "desc": "任务前置 · 入口 · 主怪：元素鬼火(蓝) Lv149、古灵精怪书 Lv148 · ecl_fild01 182,82",
+      "outset": [
+        "ecl_fild01",
+        182,
+        82
+      ],
+      "path": [
+        [
+          "ecl_fild01",
+          182,
+          82
+        ]
+      ],
+      "monsterMap": "ecl_tdun01",
+      "monsters": [
+        {
+          "id": 2367,
+          "name": "元素鬼火(蓝)",
+          "level": 149
+        },
+        {
+          "id": 2366,
+          "name": "古灵精怪书",
+          "level": 148
+        }
+      ],
+      "breakpoint": false,
+      "position": []
+    },
+    "upstream:train:malangdo": {
+      "group": "地区与扩展地下城",
+      "npc": "马来港星光珊瑚",
+      "desc": "入口 · 主怪：野猫骑士 Lv95、红海星 Lv91 · malangdo 73,239",
+      "outset": [
+        "malangdo",
+        73,
+        239
+      ],
+      "path": [
+        [
+          "malangdo",
+          73,
+          239
+        ]
+      ],
+      "monsterMap": "mal_dun01",
+      "monsters": [
+        {
+          "id": 2208,
+          "name": "野猫骑士",
+          "level": 95
+        },
+        {
+          "id": 2197,
+          "name": "红海星",
+          "level": 91
+        }
+      ],
+      "breakpoint": false,
+      "position": []
+    },
+    "upstream:train:nightmareHospital": {
+      "group": "地区与扩展地下城",
+      "npc": "噩梦医院",
+      "desc": "副本/任务前置 · 入口 · 主怪：食尸鬼 Lv111、玛那能革 Lv107 · ma_dun01 147,10",
+      "outset": [
+        "ma_dun01",
+        147,
+        10
+      ],
+      "path": [
+        [
+          "ma_dun01",
+          147,
+          10
+        ]
+      ],
+      "monsterMap": "ma_dun01",
+      "monsters": [
+        {
+          "id": 2315,
+          "name": "食尸鬼",
+          "level": 111
+        },
+        {
+          "id": 2311,
+          "name": "玛那能革",
+          "level": 107
+        }
+      ],
+      "breakpoint": false,
+      "position": []
+    },
+    "upstream:train:nidhoggurNest": {
+      "group": "地区与扩展地下城",
+      "npc": "尼德霍格之巢",
+      "desc": "副本/任务前置 · 入口 · 主怪：杜内尔 Lv135、拉塔 Lv131 · nyd_dun01 20,20",
+      "outset": [
+        "nyd_dun01",
+        20,
+        20
+      ],
+      "path": [
+        [
+          "nyd_dun01",
+          20,
+          20
+        ]
+      ],
+      "monsterMap": "nyd_dun01",
+      "monsters": [
+        {
+          "id": 2018,
+          "name": "杜内尔",
+          "level": 135
+        },
+        {
+          "id": 2017,
+          "name": "拉塔",
+          "level": 131
+        }
+      ],
+      "breakpoint": false,
+      "position": []
+    },
+    "upstream:train:moroVolcano": {
+      "group": "地区与扩展地下城",
+      "npc": "梦罗克火焰盆地",
+      "desc": "任务前置 · 入口 · 主怪：火蚁 Lv150、火焰巨石怪 Lv148 · moro_vol 165,165",
+      "outset": [
+        "moro_vol",
+        165,
+        165
+      ],
+      "path": [
+        [
+          "moro_vol",
+          165,
+          165
+        ]
+      ],
+      "monsterMap": "moro_vol",
+      "monsters": [
+        {
+          "id": 3027,
+          "name": "火蚁",
+          "level": 150
+        },
+        {
+          "id": 3023,
+          "name": "火焰巨石怪",
+          "level": 148
+        }
+      ],
+      "breakpoint": false,
+      "position": []
+    },
+    "upstream:train:rockridge": {
+      "group": "地区与扩展地下城",
+      "npc": "洛克里奇矿山",
+      "desc": "入口 · 主怪：蜘蛛战车 Lv158、精英弯刀草寇 Lv152 · rockrdg2 304,350",
+      "outset": [
+        "rockrdg2",
+        304,
+        350
+      ],
+      "path": [
+        [
+          "rockrdg2",
+          304,
+          350
+        ]
+      ],
+      "monsterMap": "rockmi1",
+      "monsters": [
+        {
+          "id": 3741,
+          "name": "蜘蛛战车",
+          "level": 158
+        },
+        {
+          "id": 3749,
+          "name": "精英弯刀草寇",
+          "level": 152
+        }
+      ],
+      "breakpoint": false,
+      "position": []
+    },
+    "upstream:train:verusLab": {
+      "group": "地区与扩展地下城",
+      "npc": "维尔纳研究所",
+      "desc": "任务前置 · 入口 · 主怪：剧毒凯美拉 Lv110、人类型凯美拉 Lv100 · slabw01 14,88",
+      "outset": [
+        "slabw01",
+        14,
+        88
+      ],
+      "path": [
+        [
+          "slabw01",
+          14,
+          88
+        ]
+      ],
+      "monsterMap": "slabw01",
+      "monsters": [
+        {
+          "id": 3633,
+          "name": "剧毒凯美拉",
+          "level": 110
+        },
+        {
+          "id": 3631,
+          "name": "人类型凯美拉",
+          "level": 100
+        }
+      ],
+      "breakpoint": false,
+      "position": []
+    },
+    "upstream:train:rudus": {
+      "group": "地区与扩展地下城",
+      "npc": "鲁杜斯实验体废弃场",
+      "desc": "任务前置 · 入口 · 主怪：双头卡夫特 Lv125、贝纳姆 Lv123 · ein_fild05 158,289",
+      "outset": [
+        "ein_fild05",
+        158,
+        289
+      ],
+      "path": [
+        [
+          "ein_fild05",
+          158,
+          289
+        ]
+      ],
+      "monsterMap": "sp_rudus",
+      "monsters": [
+        {
+          "id": 20365,
+          "name": "双头卡夫特",
+          "level": 125
+        },
+        {
+          "id": 20363,
+          "name": "贝纳姆",
+          "level": 123
+        }
+      ],
+      "breakpoint": false,
+      "position": []
+    },
+    "upstream:train:amicitia": {
+      "group": "地区与扩展地下城",
+      "npc": "阿米希提亚",
+      "desc": "Lv230/任务前置 · 入口 · 主怪：Vanilaqus Lv230、Fillia Lv229 · ein_fild08 152,95",
+      "outset": [
+        "ein_fild08",
+        152,
+        95
+      ],
+      "path": [
+        [
+          "ein_fild08",
+          152,
+          95
+        ]
+      ],
+      "monsterMap": "amicitia1",
+      "monsters": [
+        {
+          "id": 20927,
+          "name": "Vanilaqus",
+          "level": 230
+        },
+        {
+          "id": 20926,
+          "name": "Fillia",
+          "level": 229
+        }
+      ],
+      "breakpoint": false,
+      "position": []
+    },
+    "upstream:train:barmundWarehouseUpper": {
+      "group": "高等级与剧情区域",
+      "npc": "巴蒙德·塔尔塔罗斯储藏室上层",
+      "desc": "任务前置 · 入口 · 主怪：故障的警卫型α Lv186、邪心猎人侦察兵 Lv176 · ba_2whs01 156,32",
+      "outset": [
+        "ba_2whs01",
+        156,
+        32
+      ],
+      "path": [
+        [
+          "ba_2whs01",
+          156,
+          32
+        ]
+      ],
+      "monsterMap": "ba_2whs01",
+      "monsters": [
+        {
+          "id": 20639,
+          "name": "故障的警卫型α",
+          "level": 186
+        },
+        {
+          "id": 20682,
+          "name": "邪心猎人侦察兵",
+          "level": 176
+        }
+      ],
+      "breakpoint": false,
+      "position": []
+    },
+    "upstream:train:barmundWarehouseLower": {
+      "group": "高等级与剧情区域",
+      "npc": "巴蒙德·塔尔塔罗斯储藏室下层",
+      "desc": "任务前置 · 入口 · 主怪：故障的仓管 Lv185、故障的警卫型α Lv186 · ba_2whs02 337,337",
+      "outset": [
+        "ba_2whs02",
+        337,
+        337
+      ],
+      "path": [
+        [
+          "ba_2whs02",
+          337,
+          337
+        ]
+      ],
+      "monsterMap": "ba_2whs02",
+      "monsters": [
+        {
+          "id": 20637,
+          "name": "故障的仓管",
+          "level": 185
+        },
+        {
+          "id": 20639,
+          "name": "故障的警卫型α",
+          "level": 186
+        }
+      ],
+      "breakpoint": false,
+      "position": []
+    },
+    "upstream:train:barmundBath": {
+      "group": "高等级与剧情区域",
+      "npc": "巴蒙德·冥想大浴池",
+      "desc": "任务前置 · 入口 · 主怪：故障的搓澡师 Lv144、故障的搓澡师 Lv143 · ba_bath 159,26",
+      "outset": [
+        "ba_bath",
+        159,
+        26
+      ],
+      "path": [
+        [
+          "ba_bath",
+          159,
+          26
+        ]
+      ],
+      "monsterMap": "ba_bath",
+      "monsters": [
+        {
+          "id": 20634,
+          "name": "故障的搓澡师",
+          "level": 144
+        },
+        {
+          "id": 20633,
+          "name": "故障的搓澡师",
+          "level": 143
+        }
+      ],
+      "breakpoint": false,
+      "position": []
+    },
+    "upstream:train:barmundLibrary": {
+      "group": "高等级与剧情区域",
+      "npc": "巴蒙德·图书馆记忆回廊",
+      "desc": "任务前置 · 入口 · 主怪：故障的β Lv145、流浪魔法书 Lv144 · ba_lib 159,4",
+      "outset": [
+        "ba_lib",
+        159,
+        4
+      ],
+      "path": [
+        [
+          "ba_lib",
+          159,
+          4
+        ]
+      ],
+      "monsterMap": "ba_lib",
+      "monsters": [
+        {
+          "id": 20630,
+          "name": "故障的β",
+          "level": 145
+        },
+        {
+          "id": 20684,
+          "name": "流浪魔法书",
+          "level": 144
+        }
+      ],
+      "breakpoint": false,
+      "position": []
+    },
+    "upstream:train:barmundPowerPlant1": {
+      "group": "高等级与剧情区域",
+      "npc": "巴蒙德·第一魔力发电厂",
+      "desc": "任务前置 · 入口 · 主怪：故障的β Lv145、魔瘾朵洛尔 Lv145 · ba_pw01 91,288",
+      "outset": [
+        "ba_pw01",
+        91,
+        288
+      ],
+      "path": [
+        [
+          "ba_pw01",
+          91,
+          288
+        ]
+      ],
+      "monsterMap": "ba_pw01",
+      "monsters": [
+        {
+          "id": 20630,
+          "name": "故障的β",
+          "level": 145
+        },
+        {
+          "id": 20689,
+          "name": "魔瘾朵洛尔",
+          "level": 145
+        }
+      ],
+      "breakpoint": false,
+      "position": []
+    },
+    "upstream:train:barmundWaterTreatment": {
+      "group": "高等级与剧情区域",
+      "npc": "巴蒙德·污水处理厂",
+      "desc": "任务前置 · 入口 · 主怪：下水道贝纳姆 Lv142、菁英贝拉雷 Lv143 · ba_pw02 10,149",
+      "outset": [
+        "ba_pw02",
+        10,
+        149
+      ],
+      "path": [
+        [
+          "ba_pw02",
+          10,
+          149
+        ]
+      ],
+      "monsterMap": "ba_pw02",
+      "monsters": [
+        {
+          "id": 20685,
+          "name": "下水道贝纳姆",
+          "level": 142
+        },
+        {
+          "id": 20688,
+          "name": "菁英贝拉雷",
+          "level": 143
+        }
+      ],
+      "breakpoint": false,
+      "position": []
+    },
+    "upstream:train:barmundPowerPlant2": {
+      "group": "高等级与剧情区域",
+      "npc": "巴蒙德·第二魔力发电厂",
+      "desc": "任务前置 · 入口 · 主怪：魔瘾萨纳雷 Lv194、强大魔力 Lv193 · ba_pw03 13,115",
+      "outset": [
+        "ba_pw03",
+        13,
+        115
+      ],
+      "path": [
+        [
+          "ba_pw03",
+          13,
+          115
+        ]
+      ],
+      "monsterMap": "ba_pw03",
+      "monsters": [
+        {
+          "id": 20692,
+          "name": "魔瘾萨纳雷",
+          "level": 194
+        },
+        {
+          "id": 20693,
+          "name": "强大魔力",
+          "level": 193
+        }
+      ],
+      "breakpoint": false,
+      "position": []
+    },
+    "upstream:train:hallOfLife": {
+      "group": "高等级与剧情区域",
+      "npc": "生命殿堂",
+      "desc": "任务前置 · 入口 · 主怪：地之精灵 Lv262、火焰精灵 Lv263 · for_dun01 20,20",
+      "outset": [
+        "for_dun01",
+        20,
+        20
+      ],
+      "path": [
+        [
+          "for_dun01",
+          20,
+          20
+        ]
+      ],
+      "monsterMap": "for_dun01",
+      "monsters": [
+        {
+          "id": 22192,
+          "name": "地之精灵",
+          "level": 262
+        },
+        {
+          "id": 22196,
+          "name": "火焰精灵",
+          "level": 263
+        }
+      ],
+      "staticMonsterData": true,
+      "breakpoint": false,
+      "position": []
+    },
+    "upstream:train:ozLabyrinth": {
+      "group": "高等级与剧情区域",
+      "npc": "奥兹迷宫",
+      "desc": "任务前置 · 入口 · 主怪：Rake Hand Lv177、Ash Toad Lv179 · oz_dun01 112,34",
+      "outset": [
+        "oz_dun01",
+        112,
+        34
+      ],
+      "path": [
+        [
+          "oz_dun01",
+          112,
+          34
+        ]
+      ],
+      "monsterMap": "oz_dun01",
+      "monsters": [
+        {
+          "id": 21296,
+          "name": "Rake Hand",
+          "level": 177
+        },
+        {
+          "id": 21295,
+          "name": "Ash Toad",
+          "level": 179
+        }
+      ],
+      "staticMonsterData": true,
+      "breakpoint": false,
+      "position": []
+    },
+    "upstream:train:pronteraPrison": {
+      "group": "高等级与剧情区域",
+      "npc": "普隆德拉地下监狱",
+      "desc": "任务前置 · 入口 · 主怪：塔皮 Lv145、观察者 Lv145 · prt_prison 160,290",
+      "outset": [
+        "prt_prison",
+        160,
+        290
+      ],
+      "path": [
+        [
+          "prt_prison",
+          160,
+          290
+        ]
+      ],
+      "monsterMap": "prt_prison",
+      "monsters": [
+        {
+          "id": 3443,
+          "name": "塔皮",
+          "level": 145
+        },
+        {
+          "id": 3444,
+          "name": "观察者",
+          "level": 145
+        }
+      ],
+      "breakpoint": false,
+      "position": []
+    },
+    "upstream:train:invadedProntera": {
+      "group": "高等级与剧情区域",
+      "npc": "被侵略的普隆德拉",
+      "desc": "任务前置 · 入口 · 主怪：蜘蛛战车 Lv158、精英弯刀草寇 Lv152 · prt_q 155,354",
+      "outset": [
+        "prt_q",
+        155,
+        354
+      ],
+      "path": [
+        [
+          "prt_q",
+          155,
+          354
+        ]
+      ],
+      "monsterMap": "prt_q",
+      "monsters": [
+        {
+          "id": 3741,
+          "name": "蜘蛛战车",
+          "level": 158
+        },
+        {
+          "id": 3749,
+          "name": "精英弯刀草寇",
+          "level": 152
+        }
+      ],
+      "breakpoint": false,
+      "position": []
+    },
+    "upstream:train:ghChurch": {
+      "group": "古城传送点",
+      "npc": "古城修道院",
+      "desc": "直达修道院，地下公墓/地下水道由此进 · glast_01 200,137",
+      "outset": [
+        "glast_01",
+        200,
+        137
+      ],
+      "path": [
+        [
+          "glast_01",
+          200,
+          137
+        ]
+      ],
+      "breakpoint": false,
+      "position": []
+    },
+    "upstream:train:ghCastle1": {
+      "group": "古城传送点",
+      "npc": "古城城堡1层",
+      "desc": "直达城堡1层，地下监狱由此进 · glast_01 200,297",
+      "outset": [
+        "glast_01",
+        200,
+        297
+      ],
+      "path": [
+        [
+          "glast_01",
+          200,
+          297
+        ]
+      ],
+      "breakpoint": false,
+      "position": []
+    },
+    "upstream:train:ghCastle2": {
+      "group": "古城传送点",
+      "npc": "古城城堡2层",
+      "desc": "直达城堡2层 · glast_01 199,322",
+      "outset": [
+        "glast_01",
+        199,
+        322
+      ],
+      "path": [
+        [
+          "glast_01",
+          199,
+          322
+        ]
+      ],
+      "breakpoint": false,
+      "position": []
+    },
+    "upstream:train:ghKnight": {
+      "group": "古城传送点",
+      "npc": "古城骑士团1楼",
+      "desc": "直达骑士团1楼 · glast_01 77,193",
+      "outset": [
+        "glast_01",
+        77,
+        193
+      ],
+      "path": [
+        [
+          "glast_01",
+          77,
+          193
+        ]
+      ],
+      "breakpoint": false,
+      "position": []
+    },
+    "upstream:train:ghStep": {
+      "group": "古城传送点",
+      "npc": "古城层梯密穴",
+      "desc": "直达层梯密穴 · glast_01 51,108",
+      "outset": [
+        "glast_01",
+        51,
+        108
+      ],
+      "path": [
+        [
+          "glast_01",
+          51,
+          108
+        ]
+      ],
+      "breakpoint": false,
+      "position": []
+    },
+    "upstream:train:ghRoom1": {
+      "group": "古城传送点",
+      "npc": "古城室内入口1",
+      "desc": "古城室内 · glast_01 162,330",
+      "outset": [
+        "glast_01",
+        162,
+        330
+      ],
+      "path": [
+        [
+          "glast_01",
+          162,
+          330
+        ]
+      ],
+      "breakpoint": false,
+      "position": []
+    },
+    "upstream:train:ghRoom2": {
+      "group": "古城传送点",
+      "npc": "古城室内入口2",
+      "desc": "古城室内 · glast_01 179,360",
+      "outset": [
+        "glast_01",
+        179,
+        360
+      ],
+      "path": [
+        [
+          "glast_01",
+          179,
+          360
+        ]
+      ],
+      "breakpoint": false,
+      "position": []
+    },
+    "upstream:train:ghRoom3": {
+      "group": "古城传送点",
+      "npc": "古城室内入口3",
+      "desc": "古城室内 · glast_01 220,360",
+      "outset": [
+        "glast_01",
+        220,
+        360
+      ],
+      "path": [
+        [
+          "glast_01",
+          220,
+          360
+        ]
+      ],
+      "breakpoint": false,
+      "position": []
+    },
+    "upstream:train:ghRoom4": {
+      "group": "古城传送点",
+      "npc": "古城室内入口4",
+      "desc": "古城室内 · glast_01 237,330",
+      "outset": [
+        "glast_01",
+        237,
+        330
+      ],
+      "path": [
+        [
+          "glast_01",
+          237,
+          330
+        ]
+      ],
+      "breakpoint": false,
+      "position": []
+    },
+    "upstream:train:ghExit": {
+      "group": "古城传送点",
+      "npc": "古城原野出口·吉芬",
+      "desc": "返回吉芬原野 · glast_01 377,304",
+      "outset": [
+        "glast_01",
+        377,
+        304
+      ],
+      "path": [
+        [
+          "glast_01",
+          377,
+          304
+        ]
+      ],
+      "breakpoint": false,
+      "position": []
+    },
+    "upstream:wild:southGatePoring": {
+      "npc": "Lv1-10 南门 · 波利",
+      "desc": "怪物等级 1 · prt_fild08 200,200",
+      "outset": [
+        "prt_fild08",
+        200,
+        200
+      ],
+      "path": [
+        [
+          "prt_fild08",
+          200,
+          200
+        ]
+      ],
+      "breakpoint": false,
+      "position": []
+    },
+    "upstream:wild:snakeField": {
+      "npc": "Lv10-20 青蛇",
+      "desc": "怪物等级 17 · pay_fild02 155,202",
+      "outset": [
+        "pay_fild02",
+        155,
+        202
+      ],
+      "path": [
+        [
+          "pay_fild02",
+          155,
+          202
+        ]
+      ],
+      "breakpoint": false,
+      "position": []
+    },
+    "upstream:wild:bigfootField": {
+      "npc": "Lv20-30 大脚熊",
+      "desc": "pay_fild07 200,200",
+      "outset": [
+        "pay_fild07",
+        200,
+        200
+      ],
+      "path": [
+        [
+          "pay_fild07",
+          200,
+          200
+        ]
+      ],
+      "breakpoint": false,
+      "position": []
+    },
+    "upstream:wild:orcVillage": {
+      "npc": "Lv30-40 兽人村落",
+      "desc": "gef_fild10 205,209",
+      "outset": [
+        "gef_fild10",
+        205,
+        209
+      ],
+      "path": [
+        [
+          "gef_fild10",
+          205,
+          209
+        ]
+      ],
+      "breakpoint": false,
+      "position": []
+    },
+    "upstream:wild:poringIsland": {
+      "npc": "Lv40-50 波利岛",
+      "desc": "pay_fild04 197,205",
+      "outset": [
+        "pay_fild04",
+        197,
+        205
+      ],
+      "path": [
+        [
+          "pay_fild04",
+          197,
+          205
+        ]
+      ],
+      "breakpoint": false,
+      "position": []
+    },
+    "upstream:wild:greenChonchon": {
+      "npc": "Lv50-60 绿变色龙",
+      "desc": "cmd_fild01 198,204",
+      "outset": [
+        "cmd_fild01",
+        198,
+        204
+      ],
+      "path": [
+        [
+          "cmd_fild01",
+          198,
+          204
+        ]
+      ],
+      "breakpoint": false,
+      "position": []
+    },
+    "upstream:wild:mudField": {
+      "npc": "Lv60-70 泥人/蚯蚓",
+      "desc": "moc_fild17 200,196",
+      "outset": [
+        "moc_fild17",
+        200,
+        196
+      ],
+      "path": [
+        [
+          "moc_fild17",
+          200,
+          196
+        ]
+      ],
+      "breakpoint": false,
+      "position": []
+    },
+    "upstream:wild:grandPeco": {
+      "npc": "Lv70-80 七彩大嘴鸟",
+      "desc": "yuno_fild08 200,198",
+      "outset": [
+        "yuno_fild08",
+        200,
+        198
+      ],
+      "path": [
+        [
+          "yuno_fild08",
+          200,
+          198
+        ]
+      ],
+      "breakpoint": false,
+      "position": []
+    },
+    "upstream:wild:goatField": {
+      "npc": "Lv80-85 魔羌",
+      "desc": "yuno_fild11 211,207",
+      "outset": [
+        "yuno_fild11",
+        211,
+        207
+      ],
+      "path": [
+        [
+          "yuno_fild11",
+          211,
+          207
+        ]
+      ],
+      "breakpoint": false,
+      "position": []
+    },
+    "upstream:wild:metalPoring": {
+      "npc": "Lv85-90 金属波利",
+      "desc": "ein_fild08 200,200",
+      "outset": [
+        "ein_fild08",
+        200,
+        200
+      ],
+      "path": [
+        [
+          "ein_fild08",
+          200,
+          200
+        ]
+      ],
+      "breakpoint": false,
+      "position": []
+    },
+    "upstream:wild:minerField": {
+      "npc": "Lv90-95 矿工魔",
+      "desc": "ein_fild04 200,199",
+      "outset": [
+        "ein_fild04",
+        200,
+        199
+      ],
+      "path": [
+        [
+          "ein_fild04",
+          200,
+          199
+        ]
+      ],
+      "breakpoint": false,
+      "position": []
+    },
+    "upstream:wild:stalacticGolem": {
+      "npc": "Lv95-99 石头波利",
+      "desc": "ve_fild07 200,200",
+      "outset": [
+        "ve_fild07",
+        200,
+        200
+      ],
+      "path": [
+        [
+          "ve_fild07",
+          200,
+          200
+        ]
+      ],
+      "breakpoint": false,
+      "position": []
+    },
+    "upstream:wild:magmaPoring": {
+      "npc": "Lv99+ 熔岩波利",
+      "desc": "ve_fild03 200,203",
+      "outset": [
+        "ve_fild03",
+        200,
+        203
+      ],
+      "path": [
+        [
+          "ve_fild03",
+          200,
+          203
+        ]
+      ],
+      "breakpoint": false,
+      "position": []
     }
   }
 }

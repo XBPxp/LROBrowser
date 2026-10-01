@@ -298,7 +298,7 @@ const moduleSource = browserSource.replace(/\b(?:SOURCE_HASH|VALUES|CONFIGS|MESS
 await writeFile('generated/ui-state-preview.mjs', moduleSource);
 await writeFile('generated/ui-state-preview.html', `<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>原生窗口保存与拾取卡片验收</title>
 <link rel="stylesheet" href="/fonts/misans.css"><style>
-html{font-size:16px}body{margin:0;font:400 13px/1.3 Arial,"Microsoft YaHei",MiSans,"Source Han Sans CN",sans-serif;font-size-adjust:none;background:#e8e8e8;color:#222}
+html{font-size:16px}body{margin:0;font:400 13px/1.3 Arial,"Microsoft YaHei",MiSans,"LastRO Glyph Fallback",sans-serif;font-size-adjust:none;background:#e8e8e8;color:#222}
 header{padding:8px 12px;background:white}h1{font-size:16px;margin:0 0 5px}nav{display:flex;flex-wrap:wrap;gap:6px;align-items:center}button,select{font:inherit;min-height:26px}p{margin:5px 0 0}#qa{padding:8px 12px;display:flex;gap:10px;align-items:flex-start;flex-wrap:wrap}iframe{border:1px solid #888;background:#6b8068;flex:none}pre{font:11px/1.3 monospace;max-height:500px;max-width:280px;overflow:auto;margin:0}.canvas{overflow:hidden;font-size:12px;line-height:1.2;background:linear-gradient(25deg,#547254,#84966a)}#native-plane{position:absolute;left:0;top:0}#assets:empty{display:none}.canvas #assets{position:absolute;bottom:0;color:#900;background:white;z-index:5000}
 </style><body><header><h1>原生窗口保存与拾取卡片验收（离线）</h1><nav>
 <label>视口 <select id="viewport"><option>960x560</option><option>640x360</option><option>360x240</option><option>360x600</option></select></label>

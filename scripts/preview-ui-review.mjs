@@ -185,7 +185,7 @@ function show(name) {
   for (const kind of ['current', 'fixed']) {
     const plane = document.getElementById(kind); plane.replaceChildren();
     plane.style.height = sample.height + 'px'; plane.style.width = Math.max(300, sample.width + 20) + 'px';
-    const host = document.createElement('div'); host.id = kind + '-' + name; Object.assign(host.style, { position: 'relative', color: '#000', width: sample.width + 'px', height: sample.height + 'px', top: '0px', left: '0px', fontFamily: "'MiSans','Source Han Sans CN',sans-serif", fontSizeAdjust: 'none' });
+    const host = document.createElement('div'); host.id = kind + '-' + name; Object.assign(host.style, { position: 'relative', color: '#000', width: sample.width + 'px', height: sample.height + 'px', top: '0px', left: '0px', fontFamily: "Arial,'Microsoft YaHei','MiSans','LastRO Glyph Fallback',sans-serif", fontSizeAdjust: 'none' });
     if (sample.natural) Object.assign(host.style, { display: 'inline-block', width: 'max-content', height: 'auto' });
     const root = host.attachShadow({ mode: 'open' });
     const style = document.createElement('style'); style.textContent = values.common + (kind === 'current' ? sample.css : sample.fixedCss);
@@ -223,7 +223,7 @@ await writeFile('generated/ui-review-preview.js', js);
 await writeFile('generated/ui-review-trusted-dom.mjs', await readFile('src/runtime/lastro-trusted-dom.mjs', 'utf8'));
 await writeFile('generated/ui-review-preview.html', `<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>LASTRO 原生窗口布局复核</title>
 <link rel="stylesheet" href="/fonts/misans.css">
-<style>body{margin:0;padding:16px;background:#27333c;color:#edf5fa;font-family:'MiSans','Source Han Sans CN',sans-serif;font-size:12px;font-size-adjust:none;line-height:1.2}header{font-size:14px;font-size-adjust:none}h1{font-size:19px;margin:0 0 10px}.controls{display:flex;gap:8px}#review{display:flex;align-items:start;gap:50px;margin-top:20px;padding-bottom:20px}h2{font-size:14px;font-size-adjust:none}.plane{position:relative}#assets{white-space:pre-wrap;color:#ffc4b2}select,header button{font:inherit}</style>
+<style>body{margin:0;padding:16px;background:#27333c;color:#edf5fa;font-family:Arial,'Microsoft YaHei','MiSans','LastRO Glyph Fallback',sans-serif;font-size:12px;font-size-adjust:none;line-height:1.2}header{font-size:14px;font-size-adjust:none}h1{font-size:19px;margin:0 0 10px}.controls{display:flex;gap:8px}#review{display:flex;align-items:start;gap:50px;margin-top:20px;padding-bottom:20px}h2{font-size:14px;font-size-adjust:none}.plane{position:relative}#assets{white-space:pre-wrap;color:#ffc4b2}select,header button{font:inherit}</style>
 <header><h1>LASTRO · 原生窗口布局复核</h1><div class="controls"><select id="component">${windows.map(window => `<option value="${window.name}">${window.label}</option>`).join('')}</select><select id="scale"><option value="1">100%</option><option value="1.5">150%</option></select><button id="measure">记录文字与控件尺寸</button></div><p id="assets">${failures.join('\n')}</p></header><main id="review"><section><h2>原生布局</h2><div class="plane" id="current"></div></section><section><h2>修复后布局</h2><div class="plane" id="fixed"></div></section></main><script type="module" src="./ui-review-preview.js"></script></html>`);
 console.log('Native layout artwork: ' + Object.keys(manifest).length + '/' + assets.size);
 if (failures.length) console.warn(failures.join('\n'));

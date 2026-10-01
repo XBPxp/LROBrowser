@@ -9,9 +9,12 @@ import ts from 'typescript';
 import { patchRuntimeNavigation, patchRuntimePluginLoader, patchRuntimePlainTextSinks } from './patch-csp-runtime.mjs';
 import { patchRuntimeCredentialSecurity } from './lastro-credential-security.mjs';
 import { patchRuntimeLastROItemLayouts } from './lastro-network-security.mjs';
+import { patchRuntimeCharacterSwitch, patchRuntimeNetworkHandoffCleanup } from './lastro-character-switch.mjs';
+import { patchRuntimeNetworkFramingRecovery, patchRuntimeNetworkCloseDrain } from './lastro-network-receive-recovery.mjs';
+import { patchRuntimeNetworkDiagnostics } from './lastro-network-diagnostics.mjs';
 import { patchRuntimeLuaStartup } from './lastro-lua-startup.mjs';
 import { patchRuntimeDebugAccess } from './lastro-debug-access.mjs';
-import { JOB_NAME_OVERRIDES, MESSAGE_FALLBACKS, RUNTIME_TEXT_REPLACEMENTS, patchRuntimeMapLocalization, assertRuntimeLocalizationMount } from './lastro-localization.mjs';
+import { JOB_NAME_OVERRIDES, MESSAGE_FALLBACKS, RUNTIME_TEXT_REPLACEMENTS, patchRuntimeMapLocalization, patchRuntimeStatusTooltips, assertRuntimeLocalizationMount } from './lastro-localization.mjs';
 import jobNameAliases from './lastro-job-name-aliases.json' with { type: 'json' };
 import { SKILL_DESCRIPTION_OVERRIDES, SKILL_NAME_OVERRIDES } from './lastro-skill-localization.mjs';
 import { ITEM_OBTAIN_CSS } from './lastro-loot-style.mjs';
@@ -33,6 +36,8 @@ import { patchRuntimeMovementInput } from './lastro-movement-input.mjs';
 import { patchRuntimeMovementSync } from './lastro-movement-sync.mjs';
 import { installLastroToolsPanels } from './lastro-tools-panels.mjs';
 import { LASTRO_TOOLS_CSS } from './lastro-tools-style.mjs';
+import { captureLastroShortcutEntry, installLastroShortcutEntry } from './lastro-shortcut-entry.mjs';
+import { installLastroShortcutSettings } from './lastro-shortcut-settings.mjs';
 import { patchRuntimeMail } from './lastro-mail.mjs';
 import { patchPetDialogueDecoding } from './patch-pet-dialogue.mjs';
 import { patchRuntimeUiText } from './lastro-ui-text.mjs';
@@ -317,7 +322,7 @@ function patchRuntimeUiLayout(source) {
   const shortcutCss = [
     '\r\n\r\n/* LastRO shortcut typography and alignment */\r\n',
     '#ShortCut {\r\n',
-    '\tfont-family: Arial, \'Source Han Sans CN\', sans-serif;\r\n',
+    '\tfont-family: Arial, \'Microsoft YaHei\', \'MiSans\', \'LastRO Glyph Fallback\', sans-serif;\r\n',
     '\tfont-size: 10px;\r\n',
     '\tline-height: 1;\r\n',
     '}\r\n',
@@ -343,7 +348,7 @@ function patchRuntimeUiLayout(source) {
     '\tline-height: 10px;\r\n',
     '}\r\n',
     '.shortcut-tooltip {\r\n',
-    '\tfont-family: Arial, \'Source Han Sans CN\', sans-serif;\r\n',
+    '\tfont-family: Arial, \'Microsoft YaHei\', \'MiSans\', \'LastRO Glyph Fallback\', sans-serif;\r\n',
     '\tfont-size: 10px;\r\n',
     '\tline-height: 12px;\r\n',
     '}\r\n',
@@ -415,6 +420,7 @@ var init_WorldMap = __esmMin(() => {
     getMap: () => MapRenderer.loading ? "" : normalizeLastROTeleportMap(MapRenderer.currentMap),
     getProfile: () => String(Configs.get("lastroNid", 0)) + ":" + String(Configs.get("clientVer", 0)),
     onSameMap: () => showLastroTeleportNotice("已在目标地图。"),
+    showPrompt: (message, yes, no) => UIManager.showPromptBox(message, "ok", "cancel", yes, no),
     send: mapname => {
       if (!PACKET.CZ.PRIVATE_AIRSHIP_REQUEST) throw new Error("当前客户端不支持传送");
       const pkt = new PACKET.CZ.PRIVATE_AIRSHIP_REQUEST();
@@ -456,9 +462,9 @@ var init_WorldMap = __esmMin(() => {
       Navigation_default.show();
       Navigation_default.navigateTo({ startMap: MapRenderer.currentMap, startX: position[0] | 0, startY: position[1] | 0, endMap: mapname, endX: 0, endY: 0, displayName: mapname });
     },
-    teleport: mapname => {
+    teleport: (mapname, label) => {
       if (typeof LastROTools !== "undefined") LastROTools?._lastroPanels?.cancelRoute();
-      return lastroWorldMapTeleport.request(mapname);
+      return lastroWorldMapTeleport.request(mapname, label);
     },
     cancelTeleport: () => lastroWorldMapTeleport.cancelPending(),
   }, ${JSON.stringify(worldMapLayout.regions)}, ${createWorldMapIndex.toString()});
@@ -1091,7 +1097,8 @@ export function patchRuntimeChatMapLinks(source) {
   onError: error => console.warn("[LastRO] Notification recovered from an error", error),
   teleport: target => {
     const packet = new PACKET.CZ.PRIVATE_AIRSHIP_REQUEST();
-    Object.assign(packet, buildPrivateAirshipRequest({ ...target, type: 0 }));
+    // Activity coordinates use the official notification handler's type 1.
+    Object.assign(packet, buildPrivateAirshipRequest({ ...target, type: 1 }));
     Network.sendPacket(packet);
   },
 });\n${source}`;
@@ -1145,6 +1152,32 @@ export function patchNavigationPendingTargets(source) {
   return source;
 }
 
+export function patchRuntimePreferencesSave(source) {
+  const anchor = `    static save(data) {
+      const key = data._key;
+      delete data._key;
+      delete data.save;
+      const store = {};
+      store[key] = JSON.stringify(data);
+      Storage.set(store);
+      data._key = key;
+      data.save = selfSave;
+    }`;
+  return replaceOnce(source, anchor, `    static save(data) {
+      const key = data._key;
+      delete data._key;
+      delete data.save;
+      try {
+        const store = {};
+        store[key] = JSON.stringify(data);
+        Storage.set(store);
+      } finally {
+        data._key = key;
+        data.save = selfSave;
+      }
+    }`);
+}
+
 export function patchRuntimeToolsPanels(source) {
   const file = ts.createSourceFile('Online.js', source, ts.ScriptTarget.Latest, true, ts.ScriptKind.JS);
   const anchors = [], transitions = [], cleanups = [];
@@ -1195,6 +1228,7 @@ export function patchRuntimeToolsPanels(source) {
   });
   LastROTools._lastroQuestRoute = lastroVerifiedRouteRequest;
   LastROTools._lastroTeleportRejected = message => lastroRouteNavigation.onTeleportRejected(message);
+  const lastroNativeShortcutEntry = (${captureLastroShortcutEntry.toString()})(LastROTools);
   (${installLastroToolsPanels.toString()})(LastROTools, {
     document: globalThis.document, window: globalThis, GUIComponent, UIManager,
     setHtml: setLastROInnerHTML,
@@ -1205,17 +1239,85 @@ export function patchRuntimeToolsPanels(source) {
     routeMapChanged: () => lastroRouteNavigation.onMapChanged(),
     cancelRoute: () => lastroVerifiedRouteRequest.cancel(),
     showPrompt: (message, yes, no) => UIManager.showPromptBox(message, "ok", "cancel", yes, no),
-    getPresetRoutes: () => LastROTeleportPresets.profiles[Configs.get("clientVer", 0)] || {},
+    getPresetRoutes: () => {
+      const catalog = LastROTeleportPresets.profiles[Configs.get("clientVer", 0)];
+      return catalog ? { ...catalog, custom: { ...LastROTeleportPresets.upstreamCustomRoutes, ...catalog.custom } } : {};
+    },
     getProfile: () => Configs.get("lastroNid", 0),
-    loadPreferences: () => Preferences.get("LastROTeleportOrder:" + Configs.get("lastroNid", 0), { orders: {} }, 1),
-  }, ${JSON.stringify(LASTRO_TOOLS_CSS)});\n  `;
+    getCurrentLocation: () => {
+      const position = SessionStorage_default.Entity?.position;
+      const map = normalizeLastROTeleportMap(MapRenderer.currentMap);
+      if (MapRenderer.loading || !map || !position
+          || !Number.isFinite(position[0]) || !Number.isFinite(position[1])) return;
+      return { map, x: Math.floor(position[0]), y: Math.floor(position[1]) };
+    },
+    loadPreferences: () => {
+      const key = "LastROTeleportOrder:" + Configs.get("lastroNid", 0);
+      return Preferences.get(key, { _key: key, _version: 1, orders: {} }, 1);
+    },
+  }, ${JSON.stringify(LASTRO_TOOLS_CSS)});
+  (${installLastroShortcutEntry.toString()})(LastROTools, lastroNativeShortcutEntry, {
+    document: globalThis.document, setHtml: setLastROInnerHTML,
+    getEnabled: getLastroShortcutEntryEnabled,
+    normalizeRoute: normalizeRouteEntry,
+    requestRoute: route => LastROTools._lastroPanels.requestCustomRoute(route),
+  });\n  `;
   const edits = [
     { start: anchor.getStart(file), text: 'init_Preferences$1();\n  ' + install },
     { start: transitions[0].getStart(file), text: 'if (typeof LastROTools !== "undefined") LastROTools?._lastroPanels?.onMapChanging();\n      ' },
     { start: cleanups[0].body.getStart(file) + 1, text: '\n  if (typeof LastROTools !== "undefined") LastROTools?._lastroPanels?.cancelRoute();' },
   ].sort((a, b) => b.start - a.start);
   for (const edit of edits) source = source.slice(0, edit.start) + edit.text + source.slice(edit.start);
-  return `const LastROTeleportPresets = ${JSON.stringify({ profiles: teleportRoutes.profiles })};\n` + patchNavigationPendingTargets(source);
+  return `const LastROTeleportPresets = ${JSON.stringify({ profiles: teleportRoutes.profiles, upstreamCustomRoutes: teleportRoutes.upstreamCustomRoutes })};\n` + patchNavigationPendingTargets(source);
+}
+
+export function patchRuntimeShortcutSettings(source) {
+  const file = ts.createSourceFile('Online.js', source, ts.ScriptTarget.Latest, true, ts.ScriptKind.JS);
+  const anchors = [];
+  function visit(node) {
+    if (ts.isCallExpression(node) && node.expression.getText(file) === 'UIManager.addComponent'
+        && node.arguments[0]?.getText(file) === 'GraphicsOption') anchors.push(node);
+    ts.forEachChild(node, visit);
+  }
+  visit(file);
+  if (anchors.length !== 1) fail('anchor:lastro-shortcut-settings');
+  const call = anchors[0];
+  const parent = call.parent;
+  // Native registration assigns the returned GUI to GraphicsOption_default.
+  // Insert before that whole statement so Escape keeps its append/remove target.
+  const statement = ts.isBinaryExpression(parent) && parent.operatorToken.kind === ts.SyntaxKind.EqualsToken
+    && parent.left.getText(file) === 'GraphicsOption_default' && parent.right === call ? parent.parent : parent;
+  if (!ts.isExpressionStatement(statement) || statement.expression !== call && statement.expression !== parent
+    || !ts.isBlock(statement.parent) && !ts.isSourceFile(statement.parent)) fail('anchor:lastro-shortcut-settings:statement');
+  const install = `(${installLastroShortcutSettings.toString()})(GraphicsOption, {
+    document: globalThis.document,
+    getEnabled: getLastroShortcutEntryEnabled,
+    setEnabled: setLastroShortcutEntryEnabled,
+    onError: () => UIManager.showErrorBox("快捷入口设置保存失败，请重试。"),
+  });\n  `;
+  const anchor = statement.getStart(file);
+  const preference = `let lastroShortcutEntryPreferences;
+function getLastroShortcutEntryPreferences() {
+  init_Preferences$1();
+  if (!lastroShortcutEntryPreferences) {
+    const defaults = { _key: "LastROShortcutEntry", _version: 1, enabled: true };
+    try { lastroShortcutEntryPreferences = Preferences.get("LastROShortcutEntry", defaults, 1); }
+    catch { lastroShortcutEntryPreferences = { ...defaults, save() { Preferences.save(this); } }; }
+  }
+  return lastroShortcutEntryPreferences;
+}
+function getLastroShortcutEntryEnabled() {
+  return getLastroShortcutEntryPreferences().enabled !== false;
+}
+async function setLastroShortcutEntryEnabled(enabled) {
+  const preferences = getLastroShortcutEntryPreferences();
+  const next = { ...preferences, enabled: enabled === true };
+  if (typeof next.save !== "function" || await next.save.call(next) === false) throw new Error("Shortcut preference was not saved");
+  preferences.enabled = next.enabled;
+  if (typeof LastROTools !== "undefined") LastROTools?._lastroShortcutEntry?.setEnabled(next.enabled);
+  return true;
+}\n`;
+  return preference + source.slice(0, anchor) + install + source.slice(anchor);
 }
 
 export function patchMapLoadFailureRecovery(source) {
@@ -1365,6 +1467,11 @@ ${normalizedSource}`;
   output = patchRuntimeMovementInput(output);
   output = patchRuntimeMovementSync(output);
   output = patchRuntimeLastROItemLayouts(output);
+  output = patchRuntimeCharacterSwitch(output);
+  output = patchRuntimeNetworkHandoffCleanup(output);
+  output = patchRuntimeNetworkFramingRecovery(output);
+  output = patchRuntimeNetworkCloseDrain(output);
+  output = patchRuntimeNetworkDiagnostics(output);
   output = replaceOnce(output, 'init_WebSocket();', '');
   output = replaceOnce(output, 'init_NodeSocket();', '');
   output = replaceWorkerCreation(output);
@@ -1473,6 +1580,7 @@ ${normalizedSource}`;
   output = patchRuntimeUiText(output);
   output = patchRuntimeUiMessages(output);
   output = patchRuntimeMapLocalization(output);
+  output = patchRuntimeStatusTooltips(output);
   output = patchRuntimeHotkeys(output);
   output = patchRuntimeLuaStartup(output);
   output = patchLuaTableCompletion(output);
@@ -1487,6 +1595,8 @@ ${normalizedSource}`;
   output = patchRuntimeAchievementLinks(output, teleportResourceLoaderCode());
   output = patchRuntimeTeleportFeedback(output);
   output = patchRuntimeToolsPanels(output);
+  output = patchRuntimeShortcutSettings(output);
+  output = patchRuntimePreferencesSave(output);
   output = patchRuntimeNavigationUi(output);
   output = patchRuntimeQuests(output);
   output = patchRuntimeStoreScroll(output);

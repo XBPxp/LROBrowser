@@ -41,15 +41,25 @@ export function createLastroChatMapLinks({ setHtml, showPrompt, teleport, canTel
   function destination(mapValue, xValue, yValue) {
     if (typeof mapValue !== 'string') return null;
     const parts = mapValue.trim().split('#');
-    if (parts.length !== 1 && parts.length !== 3) return null;
-    const mapname = parts[0].replace(/\.gat$/i, '').toLowerCase();
-    if (!/^[a-z0-9_]{1,16}$/.test(mapname)) return null;
-    if (parts.length === 3) {
+    let map = parts.shift();
+    // Instance IDs use a three-digit prefix and a physical map name. Consume
+    // that prefix before the coordinate tuple, without confusing numeric X/Y.
+    if (/^\d{3}$/.test(map) && /^[a-z0-9_@-]+(?:\.(?:gat|rsw))?$/i.test(parts[0] ?? '')
+      && /[a-z_@-]/i.test(parts[0])) map += '#' + parts.shift();
+    const mapname = map.replace(/\.(gat|rsw)$/i, '').toLowerCase();
+    if (!/^[a-z0-9_@#-]{1,16}$/.test(mapname)) return null;
+    if (parts.length) {
+      // The official activity handler reads map#x#y and ignores tail fields.
+      // Accept empty/numeric metadata while retaining strict coordinate checks.
+      if (parts.length < 2 || parts.slice(2).some(value => !/^\d*$/.test(value.trim()))) return null;
       // Do not silently choose between two conflicting coordinate formats.
-      if ((xValue != null && coordinate(xValue) !== coordinate(parts[1]))
-        || (yValue != null && coordinate(yValue) !== coordinate(parts[2]))) return null;
-      [, xValue, yValue] = parts;
+      if ((xValue != null && coordinate(xValue) !== coordinate(parts[0]))
+        || (yValue != null && coordinate(yValue) !== coordinate(parts[1]))) return null;
+      [xValue, yValue] = parts;
     }
+    // A map-only activity uses the native packet's default 0/0 destination.
+    // Mark it explicitly so a current-map notice still requests the server warp.
+    if (xValue == null && yValue == null) return { mapname, x: 0, y: 0, mapOnly: true };
     const x = coordinate(xValue), y = coordinate(yValue);
     if (x == null || y == null) return null;
     return { mapname, x, y };
@@ -128,7 +138,7 @@ export function createLastroChatMapLinks({ setHtml, showPrompt, teleport, canTel
   }
 
   function linkTitle(target) {
-    return `传送到活动地点（${target.mapname} ${target.x}, ${target.y}）`;
+    return target.mapOnly ? `传送到活动地点（${target.mapname}）` : `传送到活动地点（${target.mapname} ${target.x}, ${target.y}）`;
   }
 
   function createLink(doc, target) {
@@ -140,6 +150,7 @@ export function createLastroChatMapLinks({ setHtml, showPrompt, teleport, canTel
     link.dataset.map = target.mapname;
     link.dataset.x = String(target.x);
     link.dataset.y = String(target.y);
+    if (target.mapOnly) link.dataset.mapOnly = 'true';
     trustedLinks.set(link, target);
     return link;
   }
@@ -155,7 +166,7 @@ export function createLastroChatMapLinks({ setHtml, showPrompt, teleport, canTel
     let offset = 0;
     for (const { start, end, target } of links) {
       fragment.append(doc.createTextNode(readable(text.slice(offset, start))));
-      fragment.append(target ? createLink(doc, target) : doc.createTextNode('[活动传送暂不可用]'));
+      fragment.append(target ? createLink(doc, target) : doc.createTextNode('[活动链接格式未识别]'));
       offset = end;
     }
     fragment.append(doc.createTextNode(readable(text.slice(offset))));
@@ -166,7 +177,7 @@ export function createLastroChatMapLinks({ setHtml, showPrompt, teleport, canTel
     const text = normalize(value);
     let output = '', offset = 0;
     for (const { start, end, target } of findLinks(text)) {
-      output += visibleText(text.slice(offset, start)) + (target ? '活动地点见聊天栏' : '[活动传送暂不可用]');
+      output += visibleText(text.slice(offset, start)) + (target ? '活动地点见聊天栏' : '[活动链接格式未识别]');
       offset = end;
     }
     return output + visibleText(text.slice(offset));
@@ -193,7 +204,7 @@ export function createLastroChatMapLinks({ setHtml, showPrompt, teleport, canTel
         const targets = [];
         for (const { start, end, target } of links) {
           html += visibleText(text.slice(offset, start));
-          html += target ? `<span data-lastro-activity="${token}-${targets.push(target) - 1}"></span>` : '[活动传送暂不可用]';
+          html += target ? `<span data-lastro-activity="${token}-${targets.push(target) - 1}"></span>` : '[活动链接格式未识别]';
           offset = end;
         }
         setHtml(parent, html + visibleText(text.slice(offset)));
@@ -218,7 +229,7 @@ export function createLastroChatMapLinks({ setHtml, showPrompt, teleport, canTel
 
   function onCurrentMap(target) {
     const map = getMap?.();
-    return typeof map === 'string' && map.trim().toLowerCase().replace(/\.(gat|rsw)$/i, '') === target.mapname;
+    return !target.mapOnly && typeof map === 'string' && map.trim().toLowerCase().replace(/\.(gat|rsw)$/i, '') === target.mapname;
   }
 
   function travel(target) {
@@ -234,6 +245,8 @@ export function createLastroChatMapLinks({ setHtml, showPrompt, teleport, canTel
       const target = destination(link.getAttribute('data-map'), link.getAttribute('data-x'), link.getAttribute('data-y'));
       const registered = trustedLinks.get(link);
       if (!target || target.mapname !== registered.mapname || target.x !== registered.x || target.y !== registered.y) return false;
+      if ((link.getAttribute('data-map-only') === 'true') !== (registered.mapOnly === true)) return false;
+      if (registered.mapOnly) target.mapOnly = true;
       if (promptOpen) return true;
       if (onCurrentMap(target)) {
         travel(target);
@@ -250,7 +263,7 @@ export function createLastroChatMapLinks({ setHtml, showPrompt, teleport, canTel
         catch (error) { report(error); }
       };
       const prompt = showPrompt(
-        `是否传送到活动地点？\n${target.mapname}（${target.x}, ${target.y}）`,
+        `是否传送到活动地点？\n${target.mapname}${target.mapOnly ? '' : `（${target.x}, ${target.y}）`}`,
         () => finish(true), () => finish(false),
       );
       if (prompt) {

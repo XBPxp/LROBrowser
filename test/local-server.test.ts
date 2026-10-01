@@ -36,7 +36,7 @@ describe('independent local client server', () => {
     expect(response.headers.get('cross-origin-embedder-policy')).toBe('require-corp');
     expect(response.headers.get('cross-origin-resource-policy')).toBe('same-origin');
     expect(await response.text()).not.toContain('/@vite/client');
-  });
+  }, 15000); // Allow cold Vite startup while the full suite parses native bundles.
   it('transforms the actual startup module without losing its staged runtime import', async () => {
     // A direct runtime download can succeed even while this import-analysis
     // step fails, preventing the browser from executing main.ts at all.

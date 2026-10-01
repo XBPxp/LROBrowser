@@ -1,6 +1,6 @@
 import ts from 'typescript';
 
-const regularFamily = "Arial, 'Microsoft YaHei', 'MiSans', 'Source Han Sans CN', sans-serif";
+const regularFamily = "Arial, 'Microsoft YaHei', 'MiSans', 'LastRO Glyph Fallback', sans-serif";
 const componentTypography = {
   ...Object.fromEntries([0, 1, 3, 4, 5].map(version => [
     `BasicInfo/BasicInfoV${version}/BasicInfoV${version}`,

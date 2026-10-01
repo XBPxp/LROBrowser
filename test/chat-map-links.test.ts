@@ -121,7 +121,7 @@ describe('activity notification teleport links', () => {
     ['overflow coordinate', '<span class="mapname" data-map="prontera#65536#184">前往</span>'],
     ['exponent coordinate', '<span class="mapname" data-map="prontera#1e2#184">前往</span>'],
     ['nonfinite coordinate', '<span class="mapname" data-map="prontera#Infinity#184">前往</span>'],
-    ['extra coordinate', '<span class="mapname" data-map="prontera#100#184#2">前往</span>'],
+    ['invalid trailing field', '<span class="mapname" data-map="prontera#100#184#broken">前往</span>'],
     ['empty map', '<span class="mapname" data-map="#100#184">前往</span>'],
     ['map traversal', '<span class="mapname" data-map="../prontera#100#184">前往</span>'],
     ['overlong map', '<span class="mapname" data-map="abcdefghijklmnopq#100#184">前往</span>'],
@@ -133,7 +133,7 @@ describe('activity notification teleport links', () => {
   ])('shows %s without creating a teleport action', (label, text) => {
     const f = fixture();
     f.render(text);
-    expect(f.parent.textContent).toBe(label === 'wrong class' ? text : '[活动传送暂不可用]');
+    expect(f.parent.textContent).toBe(label === 'wrong class' ? text : '[活动链接格式未识别]');
     expect(f.parent.querySelector('a.mapname')).toBeNull();
     expect(f.parent.querySelector('span')).toBeNull();
     expect(f.showPrompt).not.toHaveBeenCalled();

@@ -81,8 +81,8 @@ describe('native entity chat bubble typography', () => {
     expect(f.canvas.width).toBe(Math.ceil(26 * dpr));
     expect(f.canvas.height).toBe(Math.ceil(25 * dpr));
     expect(f.ctx.setTransform).toHaveBeenCalledExactlyOnceWith(dpr, 0, 0, dpr, 0, 0);
-    expect(f.fontAtMeasurement.every(font => font === '400 12px Arial, "Microsoft YaHei", MiSans, "Source Han Sans CN", sans-serif')).toBe(true);
-    expect(f.ctx.font).toBe('400 12px Arial, "Microsoft YaHei", MiSans, "Source Han Sans CN", sans-serif');
+    expect(f.fontAtMeasurement.every(font => font === '400 12px Arial, "Microsoft YaHei", MiSans, "LastRO Glyph Fallback", sans-serif')).toBe(true);
+    expect(f.ctx.font).toBe('400 12px Arial, "Microsoft YaHei", MiSans, "LastRO Glyph Fallback", sans-serif');
     expect(f.ctx.fillRect).toHaveBeenCalledExactlyOnceWith(0, 0, 26, 25);
     expect(f.roundRect).toHaveBeenCalledExactlyOnceWith(f.ctx, 0.5, 0.5, 25, 24, 2);
     expect(f.ctx.fillText.mock.calls).toEqual([['你好', 8, 17], ['你好', 7, 16]]);

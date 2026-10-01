@@ -131,7 +131,17 @@ function fixture() {
   const reads: string[] = [], urls: string[] = [], packets: Array<{ mapname: string; type: number }> = [], pending: Array<() => Promise<void>> = [];
   const state = { currentMap: 'izlude.gat', loading: false, position: [0, 0] };
   const { navigation, move } = nativeNavigation(state);
-  const tools = { _lastroPanels: { setStatus: vi.fn(), cancelRoute: () => {} } };
+  // Supply the native GUI lifecycle required by the shared shortcut-entry capture;
+  // this fixture exercises route/navigation lifecycle without appending the UI.
+  const tools = { render: vi.fn(() => ''), init: vi.fn(),
+    _lastroPanels: { setStatus: vi.fn(), cancelRoute: () => {} } };
+  const prompts: Array<{ message: string; yes(): void; no(): void }> = [];
+  const uiManager = { showErrorBox: vi.fn(), showPromptBox: vi.fn((message: string, ok: string, cancel: string, yes: () => void, no: () => void) => {
+    expect([ok, cancel]).toEqual(['ok', 'cancel']);
+    prompts.push({ message, yes, no });
+    const popup = { onRemove: () => {}, remove: () => popup.onRemove() };
+    return popup;
+  }) };
   const actor = { get position() { return state.position; } };
   let manual = false;
   const thread = { send(type: string, input: { filename: string }, callback: (bytes: ArrayBuffer | null, error?: string) => void) {
@@ -155,7 +165,7 @@ function fixture() {
     let WorldMap;
     ${worldInstallation}
     return { api: lastroWorldMapTeleport, component: WorldMap };
-  `)(thread, db, state, configs, packet, network, buildPrivateAirshipRequest, normalize, { showErrorBox: vi.fn() }, { warn() {} }, describeLastroMapLoadFailure, class {});
+  `)(thread, db, state, configs, packet, network, buildPrivateAirshipRequest, normalize, uiManager, { warn() {} }, describeLastroMapLoadFailure, class {});
   const route = new Function('Thread', 'MapRenderer', 'SessionStorage_default', 'PACKET', 'Network', 'Configs', 'Navigation_default', 'LastROTools', 'normalizeLastROTeleportMap', 'buildPrivateAirshipRequest', 'DB', 'console', 'WorldMap_default', `
     ${toolsInstallation}
     return { api: lastroVerifiedRouteRequest, navigation: lastroRouteNavigation };
@@ -163,7 +173,7 @@ function fixture() {
   tools._lastroPanels.cancelRoute = () => route.api.cancel();
   const installActions = new Function('MapRenderer', 'SessionStorage_default', 'Navigation_default', 'LastROTools', 'normalizeLastROTeleportMap', 'showLastroTeleportNotice', 'lastroWorldMapTeleport', `return ${worldActions};`);
   const actions = installActions(state, { Entity: actor }, navigation, tools, normalize, vi.fn(), world.api);
-  return { route, world, actions, state, native: navigation, move, tools, reads, urls, packets, pending, manual: (value: boolean) => { manual = value; } };
+  return { route, world, actions, state, native: navigation, move, tools, reads, urls, packets, pending, prompts, manual: (value: boolean) => { manual = value; } };
 }
 
 beforeEach(() => vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] }));
@@ -184,7 +194,9 @@ describe('native navigation and resource route lifecycle', () => {
   it.each(['navigate', 'teleport'])('a world map %s replaces an active tools itinerary without reviving its NPC target', async action => {
     const f = fixture();
     await f.route.api.request({ outset: ['izlude', 0, 0], path: [['izlude', 3, 3], ['izlude_in', 3, 3]] });
-    await f.actions[action]('izlude_in');
+    const replacement = f.actions[action]('izlude_in');
+    if (action === 'teleport') { expect(f.prompts).toHaveLength(1); f.prompts[0]!.yes(); }
+    await replacement;
     f.route.navigation.onMapChanging(); f.state.currentMap = 'izlude_in.gat'; f.route.navigation.onMapChanged();
     expect(f.native.getTarget()).toEqual(action === 'navigate' ? { map: 'izlude_in', x: 0, y: 0 } : null);
     expect(f.native.show).toHaveBeenCalledTimes(action === 'navigate' ? 1 : 0);
@@ -194,8 +206,10 @@ describe('native navigation and resource route lifecycle', () => {
   it.each(['world', 'tools'])('a newer %s request cancels the other pending resource check', async newest => {
     const f = fixture(); f.manual(true);
     const old = newest === 'world' ? f.route.api.request({ outset: ['payon', 3, 3] }) : f.actions.teleport('izlude_in');
+    if (newest === 'tools') { expect(f.prompts).toHaveLength(1); f.prompts[0]!.yes(); }
     await vi.advanceTimersByTimeAsync(0); expect(f.pending).toHaveLength(1);
     const replacement = newest === 'world' ? f.actions.teleport('izlude_in') : f.route.api.request({ outset: ['payon', 3, 3] });
+    if (newest === 'world') { expect(f.prompts).toHaveLength(1); f.prompts[0]!.yes(); }
     expect(await old).toBe(newest === 'world' ? null : false);
     await vi.advanceTimersByTimeAsync(0); expect(f.pending).toHaveLength(2);
     f.manual(false); await f.pending[1]!();
@@ -208,7 +222,10 @@ describe('native navigation and resource route lifecycle', () => {
   it.each(['123#1@abc-test', '1231@abc-test'])('loads the native scene resource through the real resolver while retaining server instance ID %s', async serverMap => {
     const f = fixture();
     const scene = nativeSceneFilename(serverMap + '.gat');
-    expect(await f.actions.teleport(serverMap)).toBe(true);
+    const request = f.actions.teleport(serverMap);
+    expect(f.prompts).toHaveLength(1); expect(f.reads).toEqual([]); expect(f.packets).toEqual([]);
+    f.prompts[0]!.yes();
+    expect(await request).toBe(true);
     expect(f.reads[0]).toBe('data/' + scene);
     expect(f.urls.some(url => url.includes('#') || url.includes(serverMap))).toBe(false);
     expect(f.packets).toEqual([expect.objectContaining({ mapname: serverMap, type: 0 })]);

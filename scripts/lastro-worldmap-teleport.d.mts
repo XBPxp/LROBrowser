@@ -6,8 +6,12 @@ export interface WorldMapTeleportOptions {
   send(mapid: string): void;
   onSameMap?(mapid: string): void;
   onError?(error: unknown): void;
+  showPrompt?(message: string, onYes: () => void, onNo: () => void): {
+    onRemove?: (...args: unknown[]) => unknown;
+    remove?: () => void;
+  } | undefined;
 }
 export function createLastroWorldMapTeleport(options: WorldMapTeleportOptions): {
-  request(mapid: string): Promise<boolean>;
+  request(mapid: string, label?: string): Promise<boolean>;
   cancelPending(): void;
 };

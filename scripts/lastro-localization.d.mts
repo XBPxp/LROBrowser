@@ -17,4 +17,6 @@ export function createLastroMapLocalization(names?: Record<string, string>, titl
   localizeInfo(mapname: unknown, info: LastroMapInfo | null, tableName?: string): LastroMapInfo | null;
 };
 export function patchRuntimeMapLocalization(source: string): string;
+export function setLastroStatusTooltip(node: HTMLElement, value: string | null | undefined): void;
+export function patchRuntimeStatusTooltips(source: string): string;
 export function assertRuntimeLocalizationMount(source: string, baseline?: string): void;

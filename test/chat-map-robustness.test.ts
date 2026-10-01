@@ -7,7 +7,7 @@ type Destination = { mapname: string; x: number; y: number };
 type Confirmation = { yes: () => void; no: () => void; prompt: { onRemove?: () => void } };
 
 const activityLink = "<span class='mapname' data-map='force_map3#100#184'>点击前往</span>";
-const unavailable = '[活动传送暂不可用]';
+const unavailable = '[活动链接格式未识别]';
 
 function fixture() {
   const parent = document.createElement('div');

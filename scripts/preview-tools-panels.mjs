@@ -10,20 +10,25 @@ import { build } from 'esbuild';
 import ts from 'typescript';
 import { installLastroToolsPanels } from './lastro-tools-panels.mjs';
 import { LASTRO_TOOLS_CSS } from './lastro-tools-style.mjs';
+import { captureLastroShortcutEntry, installLastroShortcutEntry } from './lastro-shortcut-entry.mjs';
+import { installLastroShortcutSettings } from './lastro-shortcut-settings.mjs';
 import { normalizeRouteEntry } from '../vendor/v2/lastro-v1-migration.mjs';
 import presets from './lastro-teleport-routes.json' with { type: 'json' };
 
 const runtime = await readFile('generated/runtime/Online.js', 'utf8');
 const shellCss = await readFile('src/styles.css', 'utf8');
 const file = ts.createSourceFile('Online.js', runtime, ts.ScriptTarget.Latest, true, ts.ScriptKind.JS);
-const values = {}, functions = {};
-const wanted = new Set(['Common_default$1', 'WinPopup_default$1', 'WinPopup_default$2']);
+const values = {}, functions = {}, nativeToolsMethods = {};
+const nativeMethodNames = new Set(['ensurePanelOpener', 'hidePanel', 'restorePanel', 'minimizePanel', 'collapseDetailedSettings', 'renderCompactStatus', 'renderAssistSkillList', 'applyState', 'renderQuickRoutes', 'loadQuickRoutes']);
+const wanted = new Set(['Common_default$1', 'WinPopup_default$1', 'WinPopup_default$2', 'LastROTools_default', 'GraphicsOption_default$1', 'GraphicsOption_default$2']);
 const wantedFunctions = new Set(['patchLastROToolsTemplate', 'activateLastROSettingsTab', 'showLastROSettingsView', 'showLastROMainView', '_popupPosition', '_createButton']);
 let scrollbarClass, toolsInit, promptMethod;
 function visit(node) {
   if (ts.isBinaryExpression(node)) {
     if (wanted.has(node.left.getText(file)) && ts.isStringLiteral(node.right)) values[node.left.getText(file)] = node.right.text;
     if (node.left.getText(file) === 'LastROTools.init' && ts.isFunctionExpression(node.right)) toolsInit = node.right.getText(file);
+    const method = node.left.getText(file).replace(/^LastROTools\./, '');
+    if (node.left.getText(file).startsWith('LastROTools.') && nativeMethodNames.has(method) && ts.isFunctionExpression(node.right)) nativeToolsMethods[method] = node.right.getText(file);
   }
   if (ts.isFunctionDeclaration(node) && wantedFunctions.has(node.name?.text)) functions[node.name.text] = node.getText(file);
   if (ts.isClassExpression(node) && node.name?.text === 'ScrollBar') scrollbarClass = node.getText(file);
@@ -40,6 +45,7 @@ const directory = 'generated/tools-panels-assets';
 const assets = [
   'basic_interface/titlebar_left.bmp', 'basic_interface/titlebar_mid.bmp', 'basic_interface/titlebar_right.bmp',
   'basic_interface/sys_close_off.bmp', 'basic_interface/sys_close_on.bmp',
+  'basic_interface/sys_base_off.bmp', 'basic_interface/sys_base_on.bmp',
   'basic_interface/sys_mini_off.bmp', 'basic_interface/sys_mini_on.bmp',
   'basic_interface/btnbar_mid.bmp', 'btn_resize.bmp',
   'ro_menu_icon/option_1.bmp', 'ro_menu_icon/skill_1.bmp', 'ro_menu_icon/option_2.bmp', 'ro_menu_icon/skill_2.bmp',
@@ -137,6 +143,7 @@ class GUIComponent {
   constructor(name, css) { this.name = name; this._cssText = css; this.__active = false; }
   clone(name) { const clone = new GUIComponent(name, this._cssText); clone.render = this.render; return clone; }
   getRoot() { return this._shadow || this._host; }
+  _processAllDataAttrs() { this._shadow?.querySelectorAll('[data-background]').forEach(GUIComponent.processDataAttrs); }
   static processDataAttrs(element) {
     const normal = element.dataset.background;
     if (!normal) return;
@@ -154,12 +161,12 @@ class GUIComponent {
     this.__active = true;
     if (!this._host) {
       this._host = document.createElement('div'); this._host.id = this.name;
-      this._host.style.position = 'absolute'; this._host.style.color = '#000'; this._host.style.zIndex = '50';
-      this._host.style.fontFamily = "'MiSans','Source Han Sans CN',sans-serif"; this._host.style.fontSizeAdjust = 'none';
+      this._host.style.position = 'absolute'; this._host.style.zIndex = '50';
+      this._host.style.fontFamily = "Arial,'Microsoft YaHei','MiSans','LastRO Glyph Fallback',sans-serif"; this._host.style.fontSizeAdjust = 'none';
       this._shadow = this._host.attachShadow({ mode: 'open' });
       const common = document.createElement('style'); common.textContent = values['Common_default$1'];
       const style = document.createElement('style'); style.dataset.component = this.name; style.textContent = this._cssText;
-      this._container = document.createElement('div'); this._container.className = 'ui-component-root'; this._container.innerHTML = this.render();
+      this._container = document.createElement('div'); this._container.className = 'ui-component-root'; setLastROInnerHTML(this._container, this.render());
       this._shadow.append(common, style, this._container);
       this._shadow.querySelectorAll('[data-background]').forEach(GUIComponent.processDataAttrs);
       this._shadow.addEventListener('scroll', () => recordState(), true);
@@ -194,7 +201,7 @@ class GUIComponent {
 const setupSource = String.raw`
 const components = new Map();
 const WinPopup = new GUIComponent('WinPopup', values['WinPopup_default$1']); WinPopup.render = () => values['WinPopup_default$2']; components.set('WinPopup', WinPopup);
-const tools = new GUIComponent('LastROTools', toolsCss); tools.render = () => values.toolsTemplate; components.set('LastROTools', tools);
+const tools = new GUIComponent('LastROTools', values['LastROTools_default']); tools.render = () => values.toolsTemplate; components.set('LastROTools', tools);
 tools.init = toolsInit;
 function installLastRORandomTeleportShortcut() { return false; }
 const requests = [];
@@ -222,9 +229,8 @@ function recordState(message) {
   if (message) document.getElementById('state').textContent = message;
 }
 tools.setStatus = function (message) { const status = this.getRoot()?.querySelector('.lastro-status'); if (status) status.textContent = message; recordState(message); };
-tools.hidePanel = function () { this._host.style.display = 'none'; recordState('挂机设置已收起。'); };
-tools.restorePanel = function () { if (!this._host) this.append(); this._host.style.display = ''; this.focus(); this._setupScrollbars(); };
-tools.minimizePanel = function () { this.hidePanel(); };
+Object.assign(tools, nativeToolsMethods);
+tools._defaultQuickRoutes = nativeQuickRoutes;
 tools.populateSkillSelects = function () {
   for (const select of this.getRoot().querySelectorAll('[data-skill-select]')) {
     if (select.children.length) continue;
@@ -237,7 +243,6 @@ tools.populateItemSelects = function () {
     for (const [id, name] of [[0, '请选择道具'], [501, '红色药水'], [505, '蓝色药水'], [607, '天地树果实'], [608, '天地树种子']]) select.add(new Option(name, String(id)));
   }
 };
-tools.loadQuickRoutes = function () { this._quickRoutes = { guide: routes.npc, wild: routes.train, train: routes.instance }; };
 tools.setAutomationOption = function (option, enabled) { this._settingState[option] = enabled; this.setStatus('已模拟设置 ' + option + '：' + (enabled ? '开启' : '关闭')); };
 tools.updateField = function (field, input) { this._settingState[field] = input.type === 'checkbox' ? input.checked : input.value; this.setStatus('已模拟修改 ' + field); };
 tools.submitAssistSkill = function () {
@@ -247,21 +252,57 @@ tools.submitAssistSkill = function () {
   const chip = document.createElement('span'); chip.className = 'lastro-assist-chip'; chip.textContent = skill.selectedOptions[0].textContent + ' Lv.' + level.value; root.querySelector('[data-assist-list]').append(chip);
   this.setStatus('辅助技能已写入本地预览。');
 };
-const preferenceKey = 'lastro-tools-preview-order:3';
+const preferenceKey = 'lastro-tools-preview-order:5';
 function loadPreferences() {
   let preferences = { orders: {} };
   try { const stored = JSON.parse(localStorage.getItem(preferenceKey) || 'null'); if (stored && typeof stored === 'object') preferences = stored; } catch { /* Start with the default order. */ }
-  preferences.save = () => { localStorage.setItem(preferenceKey, JSON.stringify(preferences)); recordState('已保存本地预览顺序。'); };
+  preferences.save = function () { localStorage.setItem(preferenceKey, JSON.stringify(this)); recordState('已保存本地预览设置。'); };
   return preferences;
 }
+const nativeShortcutEntry = captureLastroShortcutEntry(tools);
 panels = installLastroToolsPanels(tools, {
   document, window, GUIComponent, UIManager,
-  setHtml: (element, html) => { element.innerHTML = html; },
+  setHtml: setLastROInnerHTML,
   normalizeRoute: normalizeRouteEntry,
   requestRoute: route => { requests.push({ npc: route.npc, outset: route.outset, path: route.path }); recordState('已模拟前往：' + route.npc); return route.breakpoint ? 'navigation' : 'teleport'; },
   showPrompt: (message, yes, no) => UIManager.showPromptBox(message, 'ok', 'cancel', yes, no),
-  getProfile: () => 3, getPresetRoutes: () => routes, loadPreferences,
+  getProfile: () => 5, getPresetRoutes: () => routes, loadPreferences,
+  getCurrentLocation: () => ({ map: 'prontera', x: 156, y: 182 }),
 }, toolsCss, routes);
+const shortcutPreferenceKey = 'lastro-tools-preview-shortcut';
+let shortcutEnabled = true;
+try { shortcutEnabled = JSON.parse(localStorage.getItem(shortcutPreferenceKey) || 'null')?.enabled !== false; } catch { /* Default to the native entry. */ }
+const shortcutEntry = installLastroShortcutEntry(tools, nativeShortcutEntry, {
+  document, setHtml: setLastROInnerHTML, getEnabled: () => shortcutEnabled,
+  normalizeRoute: normalizeRouteEntry, requestRoute: route => panels.requestCustomRoute(route),
+});
+const graphics = new GUIComponent('GraphicsOption', values['GraphicsOption_default$1']);
+graphics.render = () => values['GraphicsOption_default$2'];
+graphics.init = function () {
+  this.draggable('.titlebar');
+  this.getRoot().querySelector('.close').addEventListener('click', () => this.remove());
+  this.getRoot().querySelectorAll('.tab-button').forEach(button => button.addEventListener('click', () => {
+    this.getRoot().querySelectorAll('.tab-button').forEach(tab => tab.classList.toggle('selected', tab === button));
+    this.getRoot().querySelectorAll('.tab-content').forEach(content => content.classList.toggle('selected', content.id === button.dataset.tab));
+  }));
+};
+graphics.onAppend = function () {
+  Object.assign(this._host.style, { position: 'fixed', left: '20px', top: '145px', width: 'auto', color: '#202536' });
+  this.getRoot().querySelector('.screensize').value = '1400x900';
+  this.getRoot().querySelector('.fpslimit').value = '120';
+  this.getRoot().querySelector('.cursor-option').checked = true;
+};
+installLastroShortcutSettings(graphics, {
+  document, getEnabled: () => shortcutEnabled,
+  setEnabled: enabled => {
+    localStorage.setItem(shortcutPreferenceKey, JSON.stringify({ enabled }));
+    shortcutEnabled = enabled; shortcutEntry.setEnabled(enabled);
+    recordState(enabled ? '新版快捷入口已启用。' : '已恢复传送和挂机两个入口。');
+    return true;
+  },
+  onError: error => recordState(error.message),
+});
+components.set(graphics.name, graphics);
 const ordinaryWindow = new GUIComponent('PreviewOrdinaryWindow', toolsCss + '\n:host{width:280px}.preview-window-body{box-sizing:border-box;height:135px;padding:12px;color:#263854;font-size:13px}');
 components.set(ordinaryWindow.name, ordinaryWindow);
 ordinaryWindow.render = () => '<div class="lastro-tools"><div class="lastro-ro-titlebar" data-background="basic_interface/titlebar_mid.bmp"><span class="lastro-title-left" data-background="basic_interface/titlebar_left.bmp"></span><span class="lastro-title-right" data-background="basic_interface/titlebar_right.bmp"></span><strong>普通窗口遮挡示例</strong><button type="button" class="lastro-window-close" data-background="basic_interface/sys_close_off.bmp" data-hover="basic_interface/sys_close_on.bmp" aria-label="关闭遮挡示例" title="关闭"></button></div><div class="preview-window-body">本窗口位于普通窗口层级，可以遮挡底部入口图标。<p>关闭后可继续使用入口。</p></div></div>';
@@ -279,6 +320,21 @@ function openOrdinaryWindow() {
 document.getElementById('open-automation').addEventListener('click', () => { panels.showAutomation(); recordState('已打开挂机设置。'); });
 document.getElementById('open-teleport').addEventListener('click', () => { panels.showTeleport(); recordState('已打开传送地点。'); });
 document.getElementById('open-coverage').addEventListener('click', openOrdinaryWindow);
+document.getElementById('open-graphics').addEventListener('click', () => graphics.append());
+let dragDemo;
+document.getElementById('preview-drag').addEventListener('click', event => {
+  if (dragDemo) {
+    dragDemo.list.dispatchEvent(new PointerEvent('pointercancel', { bubbles: true, pointerId: 71 }));
+    dragDemo = null; event.currentTarget.textContent = '拖拽演示'; recordState('卡片已放回列表。'); return;
+  }
+  panels.showTeleport(); panels.select('npc');
+  const list = panels.teleport.getRoot().querySelector('.lastro-route-list');
+  const handle = list.querySelector('[data-sort-handle]'), box = handle.getBoundingClientRect();
+  const point = { bubbles: true, pointerId: 71, pointerType: 'mouse', button: 0, buttons: 1, clientX: box.left + box.width / 2, clientY: box.top + box.height / 2 };
+  handle.dispatchEvent(new PointerEvent('pointerdown', point));
+  list.dispatchEvent(new PointerEvent('pointermove', { ...point, clientY: point.clientY + 6 }));
+  dragDemo = { list }; event.currentTarget.textContent = '放下卡片'; recordState('拖拽演示：卡片抬起，点击“放下卡片”恢复。');
+});
 document.getElementById('preview-scale').addEventListener('change', event => {
   document.body.style.zoom = event.target.value;
   for (const component of components.values()) component.onResize?.();
@@ -286,8 +342,8 @@ document.getElementById('preview-scale').addEventListener('change', event => {
 stateObserver = new MutationObserver(() => recordState());
 stateObserver.observe(document.body, { childList: true, subtree: true });
 window.addEventListener('pagehide', () => stateObserver.disconnect());
-tools.append(); panels.showAutomation();
-recordState('已打开挂机设置；点击入口可切换到传送地点。');
+tools.append();
+recordState('可以打开图形设置切换入口，或预览挂机设置与传送地点。');
 Promise.all(Object.keys(manifest).map(decodeBmp)).then(() => {
   document.body.dataset.assetsReady = 'true';
 });
@@ -296,11 +352,16 @@ recordState();
 previewFontsReady.then(() => requestAnimationFrame(() => recordState()));
 `;
 
+const trustedBundle = await build({ entryPoints: ['src/runtime/lastro-trusted-dom.mjs'], bundle: true, write: false, platform: 'browser', format: 'esm' });
+await writeFile('generated/tools-panels-trusted-dom.mjs', trustedBundle.outputFiles[0].text);
 const previewJs = [
+  'import { setLastROInnerHTML } from "./tools-panels-trusted-dom.mjs";',
   '// Generated offline fixture; native implementation with explicit preview services.',
   'const values = ' + JSON.stringify(values) + ';',
   'const manifest = ' + JSON.stringify(manifest) + ';',
-  'const routes = ' + JSON.stringify(presets.profiles['3']) + ';',
+  'const routes = ' + JSON.stringify({ ...presets.profiles['5'], custom: presets.upstreamCustomRoutes }) + ';',
+  'const nativeQuickRoutes = ' + JSON.stringify(JSON.parse(await readFile('test/fixtures/teleport-011-quick-routes.json', 'utf8')).routes) + ';',
+  'const nativeToolsMethods = {' + Object.entries(nativeToolsMethods).map(([name, value]) => JSON.stringify(name) + ':' + value).join(',') + '};',
   'const toolsCss = ' + JSON.stringify(LASTRO_TOOLS_CSS) + ';',
   'const ROUTE_FIELDS = ["npc", "desc", "outset", "path", "breakpoint", "position"];',
   normalizeRouteEntry.toString(), stubSource,
@@ -308,14 +369,14 @@ const previewJs = [
   functions.activateLastROSettingsTab, functions.showLastROSettingsView, functions.showLastROMainView,
   functions._popupPosition, functions._createButton,
   'const UIManager = { addComponent: component => { components.set(component.name, component); return component; }, getComponent: name => components.get(name), ' + promptMethod + ' };',
-  'const toolsInit = ' + toolsInit + ';', installLastroToolsPanels.toString(), setupSource,
+  'const toolsInit = ' + toolsInit + ';', installLastroToolsPanels.toString(), captureLastroShortcutEntry.toString(), installLastroShortcutEntry.toString(), installLastroShortcutSettings.toString(), setupSource,
 ].join('\n');
 await writeFile('generated/tools-panels-preview.js', previewJs);
 await writeFile('generated/tools-panels-preview.html', `<!doctype html><html lang="zh-CN"><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>LASTRO 挂机与传送窗口预览</title>
 <link rel="stylesheet" href="/fonts/misans.css">
 <style>${shellCss}</style>
-<style>html,body{height:100%;overflow:hidden}body{margin:0;padding:20px;box-sizing:border-box;background:#263238;color:#eef3f5;font:14px 'MiSans','Source Han Sans CN',sans-serif;font-size-adjust:none}h1{font-size:20px;margin:0 0 7px}header p{margin:0 0 8px}.preview-actions{display:flex;flex-wrap:wrap;gap:8px}#state{font-size:12px;color:#b9d5e8;margin-top:8px}#assets{color:#ffbaa5;font-size:12px;white-space:pre-wrap}</style>
-<header><h1>LASTRO · 挂机设置与传送地点</h1><p>离线预览：两个面板切换显示。设置与传送仅更新本页状态，排序保存在本地。</p><div class="preview-actions"><button id="open-automation">打开挂机设置</button><button id="open-teleport">打开传送地点</button><button id="open-coverage">打开普通窗口遮挡示例</button><select id="preview-scale" aria-label="界面缩放"><option value="1">100%</option><option value="1.5">150%</option></select></div><div id="state"></div><div id="assets">${failures.join('\n')}</div></header>
+<style>html,body{height:100%;overflow:hidden}body{margin:0;padding:20px;box-sizing:border-box;background:#263238;color:#eef3f5;font:14px Arial,'Microsoft YaHei','MiSans','LastRO Glyph Fallback',sans-serif;font-size-adjust:none}h1{font-size:20px;margin:0 0 7px}header p{margin:0 0 8px}.preview-actions{display:flex;flex-wrap:wrap;gap:8px}.preview-actions select{width:auto;min-width:100px}#state{font-size:12px;color:#b9d5e8;margin-top:8px}#assets{color:#ffbaa5;font-size:12px;white-space:pre-wrap}</style>
+<header><h1>LASTRO · 挂机设置与传送地点</h1><p>离线预览：两个面板切换显示。设置与传送仅更新本页状态，排序和自定义地点保存在本地。</p><div class="preview-actions"><button id="open-automation">打开挂机设置</button><button id="open-teleport">打开传送地点</button><button id="open-graphics">打开图形设置</button><button id="open-coverage">打开普通窗口遮挡示例</button><button id="preview-drag">拖拽演示</button><select id="preview-scale" aria-label="界面缩放"><option value="1">100%</option><option value="1.5">150%</option></select></div><div id="state"></div><div id="assets">${failures.join('\n')}</div></header>
 <script type="module" src="./tools-panels-preview.js"></script></html>`);
 console.log('Native panel artwork: ' + Object.keys(manifest).length + '/' + assets.length);
 if (failures.length) console.warn(failures.join('\n'));
