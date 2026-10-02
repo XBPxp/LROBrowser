@@ -102,6 +102,9 @@ function escapeMailText(value) {
 
 export function patchRuntimeMail(source) {
   if (!source.includes('src/UI/Components/Rodex/')) return source;
+  if (source.match(/\/\/#region src\/UI\/Components\/Rodex\/WriteRodex\.js\r?\n/g)?.length !== 1) {
+    throw new Error('anchor:mail-write-region');
+  }
   const css = { Rodex: inboxCss, WriteRodex: writeCss, ReadRodex: readCss };
   let replaced = 0;
   source = source.replace(/\/\/#region src\/UI\/Components\/Rodex\/(Rodex|WriteRodex|ReadRodex)\.(html|css)\?raw\r?\n[\s\S]*?\/\/#endregion/g,
@@ -132,7 +135,28 @@ export function patchRuntimeMail(source) {
         return replaceRequired(region, '<span data-text="2701"></span>${sender}', '<span>回复</span><span class="mail-label">${escapeMailText(sender)}</span>', 'row-sender');
       }
       if (component !== 'WriteRodex') return region;
-      region = replaceRequired(region, 'root.querySelector(".title-text").value = DB.getMessage(3575);', 'root.querySelector(".title-text").value = "";', 'title');
+      region = replaceRequired(region, 'root.querySelector(".title-text").value = DB.getMessage(3575);', 'root.querySelector(".title-text").value = "Mail";', 'title');
+      const nativeTitleLF = String.raw`  const title =
+    root
+      .querySelector(".title-text")
+      .value.replace(/^(\$|\%)/, "")
+      .replace(/\t/g, "")
+      .substring(0, 23) + String.fromCharCode(0);`;
+      const titleAnchors = [nativeTitleLF, nativeTitleLF.replaceAll('\n', '\r\n')]
+        .filter(anchor => region.includes(anchor));
+      if (titleAnchors.length !== 1) throw new Error('anchor:mail-send-title');
+      const nativeTitle = titleAnchors[0];
+      const titleEol = nativeTitle === nativeTitleLF ? '\n' : '\r\n';
+      region = replaceRequired(region, nativeTitle, nativeTitle + `
+  if (!title.slice(0, title.indexOf("\\0")).replace(/[\\u0000-\\u001f\\u007f-\\u009f]/g, "").trim()) {
+    ChatBox_default.addText(
+      "邮件标题不能为空。",
+      ChatBox_default.TYPE.INFO_MAIL,
+      ChatBox_default.FILTER.PUBLIC_LOG,
+    );
+    root.querySelector(".title-text").focus();
+    return;
+  }`.replaceAll('\n', titleEol), 'send-title');
       region = replaceRequired(region, '${prettifyZeny$3(SessionStorage_default.zeny)} Zeny', '${prettifyZeny$3(SessionStorage_default.zeny)} 金币', 'currency');
       if (region.split('"0  2000"').length !== 3) throw new Error('anchor:mail-weight-reset');
       region = region.replaceAll('"0  2000"', '"0 / 2000"');

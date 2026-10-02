@@ -2,7 +2,7 @@
 import { readFileSync } from 'node:fs';
 import { runInNewContext } from 'node:vm';
 import ts from 'typescript';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { patchRuntimeMail } from '../scripts/lastro-mail.mjs';
 
 const vendor = readFileSync('vendor/v2/Online.js', 'utf8');
@@ -25,17 +25,17 @@ function find(source: string, predicate: (node: ts.Node) => boolean) {
   if (found.length !== 1) throw new Error('Missing unique native mail fixture');
   return found[0]!.getText(file);
 }
-function declaration(component: string, name: string) {
-  return find(region(patched, `src/UI/Components/Rodex/${component}.js`), node =>
+function declaration(component: string, name: string, runtimeSource = patched) {
+  return find(region(runtimeSource, `src/UI/Components/Rodex/${component}.js`), node =>
     ts.isFunctionDeclaration(node) && node.name?.text === name);
 }
-function assignment(component: string, name: string) {
-  return find(region(patched, `src/UI/Components/Rodex/${component}.js`), node =>
+function assignment(component: string, name: string, runtimeSource = patched) {
+  return find(region(runtimeSource, `src/UI/Components/Rodex/${component}.js`), node =>
     ts.isBinaryExpression(node) && ts.isPropertyAccessExpression(node.left)
       && ts.isIdentifier(node.left.expression) && node.left.expression.text === component && node.left.name.text === name);
 }
-function template(component: string, extension = 'html?raw') {
-  const file = ast(region(patched, `src/UI/Components/Rodex/${component}.${extension}`));
+function template(component: string, extension = 'html?raw', runtimeSource = patched) {
+  const file = ast(region(runtimeSource, `src/UI/Components/Rodex/${component}.${extension}`));
   let value: string | undefined;
   function visit(node: ts.Node) {
     if (ts.isBinaryExpression(node) && ts.isStringLiteral(node.right)) value = node.right.text;
@@ -45,10 +45,14 @@ function template(component: string, extension = 'html?raw') {
   if (value === undefined) throw new Error('Missing native template');
   return value;
 }
-function mount(component: string) {
+const mountedHosts: HTMLElement[] = [];
+afterEach(() => mountedHosts.splice(0).forEach(host => host.remove()));
+function mount(component: string, runtimeSource = patched) {
   const host = document.createElement('div');
   const root = host.attachShadow({ mode: 'open' });
-  root.innerHTML = template(component);
+  root.innerHTML = template(component, 'html?raw', runtimeSource);
+  document.body.append(host);
+  mountedHosts.push(host);
   function element<T extends HTMLElement = HTMLElement>(selector: string): T {
     const node = root.querySelector<T>(selector);
     if (!node) throw new Error(`Missing ${component} ${selector}`);
@@ -63,22 +67,23 @@ interface Writer {
   updateWeight: (weight: number) => void; updateTax: () => void;
   characterInfo: (packet: { level: number; Job: number; CharID: number; name?: string }) => void;
 }
-function writer() {
-  const dom = mount('WriteRodex');
+function writer(runtimeSource = patched) {
+  const dom = mount('WriteRodex', runtimeSource);
   const sent = vi.fn(), cancel = vi.fn(), validate = vi.fn(), messages = vi.fn();
+  const session = { Entity: { display: { name: '寄件角色' } }, zeny: 100000 };
   const native = {
     _host: dom.host, _shadow: dom.root, receiver: null, CharID: 0, tax: 0, list: [],
     requestSendRodex: sent, requestCancelWriteRodex: cancel, validateName: validate,
     focus: vi.fn(), draggable: vi.fn(),
   };
   const names = ['_root$8', 'onClickClose$1', 'onClickSend', 'onClickValidateName', 'prettifyZeny$3'];
-  const handlers = names.map(name => declaration('WriteRodex', name)).join('\n');
+  const handlers = names.map(name => declaration('WriteRodex', name, runtimeSource)).join('\n');
   const methods = ['initData', 'onAppend', 'updateWeight', 'updateTax', 'characterInfo']
-    .map(name => assignment('WriteRodex', name)).join(';\n');
+    .map(name => assignment('WriteRodex', name, runtimeSource)).join(';\n');
   runInNewContext(`${handlers}\n${methods};`, {
     WriteRodex: native,
     DB: { getMessage: (id: number) => id === 3575 ? 'TITLE' : `message-${id}` },
-    SessionStorage_default: { Entity: { display: { name: '寄件角色' } }, zeny: 100000 },
+    SessionStorage_default: session,
     ChatBox_default: { addText: messages, TYPE: { INFO_MAIL: 1 }, FILTER: { PUBLIC_LOG: 0 } },
     Rodex_default: { _host: { style: { top: '0px', left: '0px' } } },
     Renderer: { width: 1200, height: 800 }, MonsterTable_default: { 1: '剑士' },
@@ -87,7 +92,7 @@ function writer() {
   const api = native as unknown as Writer;
   api.onAppend();
   api.initData({ receiveName: '收件角色' });
-  return { ...dom, api, sent, cancel, validate, messages };
+  return { ...dom, api, sent, cancel, validate, messages, session };
 }
 
 function reader() {
@@ -204,15 +209,131 @@ describe('native mail localization and behavior', () => {
     expect(f.reply).toHaveBeenCalledExactlyOnceWith(name);
   });
 
-  it('initializes a blank title with a Chinese placeholder and does not send TITLE', () => {
+  it('initializes the default title and sends it without the message-table TITLE', () => {
     const f = writer();
-    expect(f.element<HTMLInputElement>('.title-text').value).toBe('');
+    expect(f.element<HTMLInputElement>('.title-text').value).toBe('Mail');
     expect(f.element<HTMLInputElement>('.title-text').placeholder).toBe('标题');
     expect(f.element('.character-zeny').textContent).toBe('100,000 金币');
     f.api.receiver = '收件角色'; f.api.CharID = 42;
     f.element('.send').click();
-    expect(f.sent).toHaveBeenCalledExactlyOnceWith('收件角色', '寄件角色', 0, 1, 1, 42, '\0', '\0');
+    expect(f.sent).toHaveBeenCalledExactlyOnceWith('收件角色', '寄件角色', 0, 5, 1, 42, 'Mail\0', '\0');
     expect(f.cancel).toHaveBeenCalledOnce();
+  });
+
+  it('builds the default title through the real mail sender, packet 2 and BinaryWriter', () => {
+    const f = writer(), packets: Array<{ bytes: Uint8Array; offset: number }> = [];
+    const packetStart = vendor.indexOf('PACKET.CZ.REQ_SEND_RODEX2 =');
+    const packetEnd = vendor.indexOf('PACKET.CZ.CHECK_RECEIVE_CHARACTER_NAME =', packetStart);
+    if (packetStart < 0 || packetEnd <= packetStart) throw new Error('Missing native mail packet 2');
+    const sender = find(region(vendor, 'src/Engine/MapEngine/Rodex.js'), node =>
+      ts.isBinaryExpression(node) && ts.isPropertyAccessExpression(node.left)
+      && ts.isIdentifier(node.left.expression) && node.left.expression.text === 'WriteRodex_default'
+      && node.left.name.text === 'requestSendRodex');
+    runInNewContext(`${region(vendor, 'src/Utils/BinaryWriter.js')}\ninit_BinaryWriter();\n${vendor.slice(packetStart, packetEnd)}\n${sender};`, {
+      __esmMin: (callback: () => void) => callback, init_CodepageManager() {},
+      // ASCII bytes are identical across the supported code pages; this wire
+      // case isolates the default title from unrelated multibyte name handling.
+      CodepageManager: { encode: (value: string) => {
+        if ([...value].some(character => character.charCodeAt(0) > 0x7f)) throw new Error('ASCII-only mail wire fixture');
+        return Uint8Array.from(value, character => character.charCodeAt(0));
+      } },
+      PACKET: { CZ: {} }, PacketVerManager_default: { value: 20160330 }, WriteRodex_default: f.api,
+      Network: { sendPacket: (packet: { build: () => { buffer: ArrayBuffer; offset: number } }) => {
+        const built = packet.build(); packets.push({ bytes: new Uint8Array(built.buffer), offset: built.offset });
+      } },
+    });
+    f.api.receiver = 'Receiver'; f.api.CharID = 77; f.session.Entity.display.name = 'Sender';
+    f.element('.send').click();
+    expect(packets).toHaveLength(1);
+    const packet = packets[0]!, header = new DataView(packet.bytes.buffer);
+    expect(header.getUint16(0, true)).toBe(2670);
+    expect(header.getUint16(2, true)).toBe(74);
+    expect(packet.bytes).toHaveLength(74); expect(packet.offset).toBe(74);
+    expect(header.getUint16(60, true)).toBe(5); expect(header.getUint16(62, true)).toBe(1);
+    expect(header.getUint32(64, true)).toBe(77);
+    expect([...packet.bytes.slice(68)]).toEqual([77, 97, 105, 108, 0, 0]);
+    expect(f.cancel).toHaveBeenCalledOnce(); expect(f.messages).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['deleted title', ''],
+    ['ASCII whitespace', '   '],
+    ['full-width whitespace', '\u3000\u3000'],
+    ['mixed Unicode whitespace', ' \u00a0\u3000 '],
+    ['tabs removed by native cleaning', '\t\t'],
+    ['leading dollar removed by native cleaning', '$'],
+    ['leading percent removed by native cleaning', '%'],
+    ['only C0 controls', '\u0001\u001b\u001f'],
+    ['only C1 controls', '\u007f\u0085\u009f'],
+    ['only NUL', '\0'],
+    ['text after the first NUL', '\0隐藏标题'],
+    ['whitespace before the first NUL', ' \u3000\0隐藏标题'],
+    ['text outside the 23-character transmitted title', ' '.repeat(23) + '后面的标题'],
+    ['native prefix cleaning before title truncation', '$' + '\u3000'.repeat(23) + '后面的标题'],
+  ])('rejects %s without losing the draft and sends after its title is corrected', (_name, rawTitle) => {
+    const f = writer();
+    f.api.characterInfo({ name: '确认收件人', level: 10, Job: 1, CharID: 123 });
+    const title = f.element<HTMLInputElement>('.title-text');
+    const body = f.element<HTMLTextAreaElement>('.content-text');
+    const value = f.element<HTMLInputElement>('.value');
+    const attachments = [{ index: 3, ITID: 501, count: 2 }];
+    f.api.list = attachments;
+    const item = document.createElement('div'); item.dataset.index = '3'; item.textContent = '附件草稿';
+    f.element('.item-list').append(item);
+    title.value = rawTitle; body.value = '保留\t正文'; value.value = '1200';
+    f.api.updateWeight(1000); f.api.updateTax();
+    const draftTitle = title.value, itemMarkup = f.element('.item-list').innerHTML;
+    const tax = f.api.tax, balance = f.session.zeny;
+    body.focus(); expect(f.root.activeElement).toBe(body);
+    f.element('.send').click();
+    expect(f.sent).not.toHaveBeenCalled(); expect(f.cancel).not.toHaveBeenCalled();
+    expect(f.messages).toHaveBeenCalledExactlyOnceWith('邮件标题不能为空。', 1, 0);
+    expect(f.root.activeElement).toBe(title);
+    expect(title.value).toBe(draftTitle); expect(body.value).toBe('保留\t正文');
+    expect(value.value).toBe('1200'); expect(f.api.tax).toBe(tax);
+    expect(f.api.list).toBe(attachments); expect(f.element('.item-list').innerHTML).toBe(itemMarkup);
+    expect(f.element('.weigth-text').textContent).toBe('1000 / 2000');
+    expect(f.element('.tax-text').textContent).toBe('2524');
+    expect(f.session.zeny).toBe(balance); expect(f.element('.character-zeny').textContent).toBe('100,000 金币');
+    expect(f.api.receiver).toBe('确认收件人'); expect(f.api.CharID).toBe(123);
+    expect(f.host.isConnected).toBe(true); expect(f.host.style.display).not.toBe('none');
+    title.value = '修正标题'; f.element('.send').click();
+    expect(f.sent).toHaveBeenCalledExactlyOnceWith('确认收件人', '寄件角色', 1200, 5, 5, 123, '修正标题\0', '保留正文\0');
+    expect(f.cancel).toHaveBeenCalledOnce();
+  });
+
+  it('preserves visible title prefixes and the native cleaning instead of rewriting valid titles', () => {
+    const f = writer(); f.api.receiver = '收件人'; f.api.CharID = 7;
+    const title = f.element<HTMLInputElement>('.title-text');
+    title.value = '$%标题'; f.element('.send').click();
+    expect(f.sent).toHaveBeenLastCalledWith('收件人', '寄件角色', 0, 4, 1, 7, '%标题\0', '\0');
+    title.value = '标题\0尾部'; f.element('.send').click();
+    expect(f.sent).toHaveBeenLastCalledWith('收件人', '寄件角色', 0, 6, 1, 7, '标题\0尾部\0', '\0');
+    expect(f.sent).toHaveBeenCalledTimes(2); expect(f.messages).not.toHaveBeenCalled();
+  });
+
+  it('uses the default title for replies and restores it after closing and reopening the writer', () => {
+    const f = writer(), read = reader(); read.init(); read.element('.reply').click();
+    expect(read.reply).toHaveBeenCalledExactlyOnceWith('寄件人');
+    const recipient = read.reply.mock.calls[0]![0] as string;
+    f.api.initData({ receiveName: recipient });
+    expect(f.element<HTMLInputElement>('.name').value).toBe('寄件人');
+    expect(f.element<HTMLInputElement>('.title-text').value).toBe('Mail');
+    expect(f.api.receiver).toBeNull(); expect(f.api.CharID).toBe(0);
+    f.element<HTMLInputElement>('.title-text').value = '旧草稿';
+    f.element<HTMLTextAreaElement>('.content-text').value = '旧正文';
+    f.api.list = [{ index: 2 }]; f.api.updateWeight(500);
+    f.element('.close').click();
+    expect(f.element<HTMLInputElement>('.title-text').value).toBe('');
+    expect(f.host.style.display).toBe('none'); expect(f.cancel).toHaveBeenCalledOnce();
+    f.api.onAppend(); f.api.initData({ receiveName: '' });
+    expect(f.element<HTMLInputElement>('.title-text').value).toBe('Mail');
+    expect(f.element<HTMLTextAreaElement>('.content-text').value).toBe('');
+    expect(f.element<HTMLInputElement>('.name').value).toBe('');
+    expect(f.api.list).toEqual([]); expect(f.host.style.display).not.toBe('none');
+    f.api.receiver = '新收件人'; f.api.CharID = 456; f.element('.send').click();
+    expect(f.sent).toHaveBeenCalledExactlyOnceWith('新收件人', '寄件角色', 0, 5, 1, 456, 'Mail\0', '\0');
+    expect(f.cancel).toHaveBeenCalledTimes(2);
   });
 
   it('preserves native sanitized send arguments and binds only one send when reopened', () => {
@@ -242,6 +363,22 @@ describe('native mail localization and behavior', () => {
     expect(f.sent).not.toHaveBeenCalled();
     expect(f.messages).toHaveBeenLastCalledWith('message-2643', 1, 0);
     expect(f.cancel).not.toHaveBeenCalled();
+  });
+
+  it('keeps receiver and funds validation ahead of the title error without changing either flow', () => {
+    const f = writer(); f.element<HTMLInputElement>('.title-text').value = '';
+    f.element('.send').click();
+    expect(f.messages).toHaveBeenLastCalledWith('message-2611', 1, 0);
+    f.api.characterInfo({ name: '确认收件人', level: 10, Job: 1, CharID: 101 });
+    f.element<HTMLInputElement>('.value').value = '100000'; f.api.updateTax();
+    f.element('.send').click();
+    expect(f.messages).toHaveBeenLastCalledWith('message-2643', 1, 0);
+    expect(f.sent).not.toHaveBeenCalled(); expect(f.cancel).not.toHaveBeenCalled();
+    f.element<HTMLInputElement>('.value').value = '1200'; f.api.updateTax(); f.element('.send').click();
+    expect(f.messages).toHaveBeenLastCalledWith('邮件标题不能为空。', 1, 0);
+    expect(f.messages).toHaveBeenCalledTimes(3); expect(f.sent).not.toHaveBeenCalled();
+    expect(f.cancel).not.toHaveBeenCalled(); expect(f.api.receiver).toBe('确认收件人');
+    expect(f.api.CharID).toBe(101); expect(f.session.zeny).toBe(100000);
   });
 
   it('keeps weight, tax, red balance warning and close/reset behavior', () => {
@@ -287,6 +424,37 @@ describe('native mail localization and behavior', () => {
     f.init(false);
     expect(f.element('.get-content').style.display).toBe('none');
     expect(f.element('.get-zeny').style.display).toBe('none');
+  });
+
+  it('transforms actual CRLF mail regions and executes the default title and invalid-title guard', () => {
+    const crlf = source.replace(/\r?\n/g, '\r\n');
+    const converted = patchRuntimeMail(crlf);
+    expect((ast(converted) as ts.SourceFile & { parseDiagnostics: readonly ts.Diagnostic[] }).parseDiagnostics).toEqual([]);
+    const f = writer(converted);
+    const title = f.element<HTMLInputElement>('.title-text');
+    expect(title.value).toBe('Mail');
+    expect(title.placeholder).toBe('标题');
+    f.api.receiver = '收件人'; f.api.CharID = 11;
+    title.value = ' '.repeat(23) + '无法发送的尾部文字';
+    f.element<HTMLTextAreaElement>('.content-text').focus(); f.element('.send').click();
+    expect(f.messages).toHaveBeenCalledExactlyOnceWith('邮件标题不能为空。', 1, 0);
+    expect(f.root.activeElement).toBe(title);
+    expect(f.sent).not.toHaveBeenCalled(); expect(f.cancel).not.toHaveBeenCalled();
+    f.api.initData({ receiveName: '收件人' }); f.api.receiver = '收件人'; f.api.CharID = 11;
+    expect(title.value).toBe('Mail'); f.element('.send').click();
+    expect(f.sent).toHaveBeenCalledExactlyOnceWith('收件人', '寄件角色', 0, 5, 1, 11, 'Mail\0', '\0');
+  });
+
+  it('rejects missing or ambiguous send-title and writer-region anchors before returning a partial patch', () => {
+    const lf = source.replaceAll('\r\n', '\n');
+    const nativeTitle = '  ' + find(region(lf, 'src/UI/Components/Rodex/WriteRodex.js'), node =>
+      ts.isVariableStatement(node) && node.declarationList.declarations.some(declaration =>
+        ts.isIdentifier(declaration.name) && declaration.name.text === 'title'));
+    expect(lf).toContain(nativeTitle);
+    expect(() => patchRuntimeMail(lf.replace('.substring(0, 23)', '.substring(0, 24)'))).toThrow('anchor:mail-send-title');
+    expect(() => patchRuntimeMail(lf.replace(nativeTitle, nativeTitle + '\n' + nativeTitle))).toThrow('anchor:mail-send-title');
+    expect(() => patchRuntimeMail(lf.replace(nativeTitle, nativeTitle + '\n' + nativeTitle.replaceAll('\n', '\r\n')))).toThrow('anchor:mail-send-title');
+    expect(() => patchRuntimeMail(lf + '\n' + region(lf, 'src/UI/Components/Rodex/WriteRodex.js'))).toThrow('anchor:mail-write-region');
   });
 
   it('fails on native anchor drift instead of partially changing an unknown layout', () => {
