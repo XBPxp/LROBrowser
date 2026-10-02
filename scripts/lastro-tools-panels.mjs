@@ -393,6 +393,8 @@ export function installLastroToolsPanels(tools, deps, css, presetRoutes = {}) {
     confirmation = null; previous.settled = true; previous.popup?.remove?.();
   }
   function go(route) {
+    if (confirmation) return;
+    if (deps.shouldConfirmTeleport?.() === false) { run(route); return; }
     confirmAction(`是否前往${route.npc}？`, () => run(route));
   }
   function confirmAction(message, action) {

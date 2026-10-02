@@ -4,6 +4,7 @@ import vm from 'node:vm';
 import ts from 'typescript';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { installLastroShortcutSettings } from '../scripts/lastro-shortcut-settings.mjs';
+import { installLastroTeleportSettings } from '../scripts/lastro-teleport-settings.mjs';
 import { lastroUiWindowAppend } from '../scripts/lastro-ui-state.mjs';
 
 const vendor = readFileSync('vendor/v2/Online.js', 'utf8');
@@ -16,7 +17,7 @@ const patchDeclarations = patchFile.statements.filter(node => ts.isFunctionDecla
 if (patchDeclarations.length !== 1) throw new Error('Missing shortcut-settings patch');
 const patchRuntimeShortcutSettings = vm.runInNewContext(
   patchDeclarations[0]!.getText(patchFile).replace(/^export\s+/, '') + '\npatchRuntimeShortcutSettings;',
-  { ts, installLastroShortcutSettings, fail: (message: string) => { throw new Error(message); } },
+  { ts, installLastroShortcutSettings, installLastroTeleportSettings, fail: (message: string) => { throw new Error(message); } },
 ) as (source: string) => string;
 function region(source: string, name: string) {
   const start = source.indexOf(`//#region ${name}`), end = source.indexOf('//#endregion', start);
@@ -55,11 +56,18 @@ function classMembers(source: string, module: string, className: string, names: 
 function preferenceHelpers(source: string) {
   const prefix = source.slice(0, source.indexOf('//#region'));
   const file = ts.createSourceFile('preferences.js', prefix, ts.ScriptTarget.Latest, true, ts.ScriptKind.JS);
-  const names = ['getLastroShortcutEntryPreferences', 'getLastroShortcutEntryEnabled', 'setLastroShortcutEntryEnabled'];
-  const functions = file.statements.filter(node => ts.isFunctionDeclaration(node) && names.includes(node.name?.text ?? ''));
+  const groups = [
+    ['getLastroShortcutEntryPreferences', 'getLastroShortcutEntryEnabled', 'setLastroShortcutEntryEnabled'],
+    ['getLastroTeleportConfirmationPreferences', 'getLastroTeleportConfirmationEnabled', 'setLastroTeleportConfirmationEnabled'],
+  ];
+  const names = groups.flat();
+  const functions = file.statements.filter((node): node is ts.FunctionDeclaration => ts.isFunctionDeclaration(node) && names.includes(node.name?.text ?? ''));
   if (!functions.length) return '';
-  if (functions.length !== names.length) throw new Error('Incomplete generated shortcut preference helpers');
-  return 'let lastroShortcutEntryPreferences;\n' + functions.map(node => node.getText(file)).join('\n');
+  for (const group of groups) {
+    const count = functions.filter(node => group.includes(node.name?.text ?? '')).length;
+    if (count && count !== group.length) throw new Error('Incomplete generated graphics preference helpers');
+  }
+  return 'let lastroShortcutEntryPreferences, lastroTeleportConfirmationPreferences;\n' + functions.map(node => node.getText(file)).join('\n');
 }
 interface Component {
   name: string; __loaded: boolean; __active: boolean; _host: HTMLElement | null;
@@ -73,11 +81,13 @@ afterEach(() => {
   document.body.replaceChildren();
 });
 async function microtasks() { for (let index = 0; index < 8; index++) await Promise.resolve(); }
-function runtime(source: string, initialEnabled = true) {
+function runtime(source: string, initialEnabled = true, initialTeleportEnabled?: boolean) {
   const errors: unknown[] = [], timeline: string[] = [];
   const saved = new Map<string, Record<string, unknown>>([['LastROShortcutEntry', { enabled: initialEnabled }]]);
-  const save = vi.fn(function (this: Record<string, unknown>) {
+  if (initialTeleportEnabled !== undefined) saved.set('LastROTeleportConfirmation', { enabled: initialTeleportEnabled });
+  const save = vi.fn(function (this: Record<string, unknown>): unknown {
     saved.set(String(this._key), { ...this, save: undefined });
+    return true;
   });
   const preferences = { get: vi.fn((key: string, defaults: Record<string, unknown>) => ({
     ...defaults, ...saved.get(key), _key: key, save,
@@ -108,6 +118,7 @@ function runtime(source: string, initialEnabled = true) {
     Context: { isFullScreen: () => true }, FPS_default: { _host: null, toggle: vi.fn() },
     MemoryManager: { search: () => [] }, ChatBox_default: { addText: vi.fn(), TYPE: {}, FILTER: {} },
     KEYS: { ESCAPE: 27 }, fixtureLifecycle: (name: string) => timeline.push(name),
+    fixtureError: (message: string) => errors.push(new Error(message)),
   });
   const stubs = [
     'FPS', 'Configs', 'Context', 'Preferences$1', 'Graphics', 'Renderer', 'UIManager', 'GUIComponent',
@@ -125,7 +136,7 @@ function runtime(source: string, initialEnabled = true) {
     var UIManager = class UIManager {
       static components = {};
       ${classMembers(source, 'src/UI/UIManager.js', 'UIManager', ['addComponent'])}
-      static showErrorBox(message) { throw new Error(message); }
+      static showErrorBox(message) { fixtureError(message); }
     }
     ${preferenceHelpers(source)}
   `;
@@ -151,10 +162,10 @@ function runtime(source: string, initialEnabled = true) {
 }
 
 describe.each([
-  { name: 'native', source: native, shortcut: false },
-  { name: 'fresh shortcut patch', source: patched, shortcut: true },
-  { name: 'generated runtime', source: generated, shortcut: true },
-])('Escape opens GraphicsOption through the $name lifecycle', ({ source, shortcut }) => {
+  { name: 'native', source: native, shortcut: false, teleport: false },
+  { name: 'fresh shortcut patch', source: patched, shortcut: true, teleport: true },
+  { name: 'generated runtime', source: generated, shortcut: true, teleport: generated.includes('_lastroTeleportSettings') },
+])('Escape opens GraphicsOption through the $name lifecycle', ({ source, shortcut, teleport }) => {
   it('keeps the registered GUI component as the default export and opens its real Shadow DOM controls', () => {
     const h = runtime(source);
     expect(h.context.GraphicsOption_default).toBe(h.graphics);
@@ -173,6 +184,7 @@ describe.each([
     expect(root.querySelector<HTMLInputElement>('.details')?.value).toBe(String(h.settings.quality));
     expect(root.querySelector<HTMLInputElement>('.cursor-option')?.checked).toBe(true);
     expect(root.querySelectorAll('.lastro-shortcut-entry')).toHaveLength(shortcut ? 1 : 0);
+    expect(root.querySelectorAll('.lastro-teleport-confirmation')).toHaveLength(teleport ? 1 : 0);
   });
 
   it('reuses the prepared component through menu and close-button toggles without duplicating settings', () => {
@@ -191,6 +203,7 @@ describe.each([
     expect(h.init).toHaveBeenCalledOnce();
     expect(h.append).toHaveBeenCalledTimes(3);
     expect(root.querySelectorAll('.lastro-shortcut-entry')).toHaveLength(shortcut ? 1 : 0);
+    expect(root.querySelectorAll('.lastro-teleport-confirmation')).toHaveLength(teleport ? 1 : 0);
     expect(h.errors).toEqual([]);
   });
 
@@ -246,5 +259,80 @@ describe.each([
     expect(root.querySelectorAll('.lastro-shortcut-entry')).toHaveLength(1);
     expect(h.saved.get('LastROShortcutEntry')?.enabled).toBe(true);
     expect(h.errors).toEqual([]);
+  });
+});
+
+describe.each([
+  { name: 'fresh shortcut patch', source: patched },
+  ...(generated.includes('_lastroTeleportSettings') ? [{ name: 'generated runtime', source: generated }] : []),
+])('GraphicsOption teleport preferences in $name', ({ source }) => {
+  it('defaults to enabled below the shortcut row without writing either preference on open', () => {
+    const h = runtime(source);
+    h.toggle();
+    const root = h.graphics.getRoot(), teleport = root.querySelector<HTMLInputElement>('.lastro-teleport-confirmation')!;
+    expect(teleport.checked).toBe(true);
+    expect(teleport.closest('label')?.textContent).toBe('启用传送确认');
+    const rows = Array.from(root.querySelectorAll('#basic table tr'));
+    expect(rows.at(-1)?.querySelector('td')?.textContent).toBe('传送确认');
+    expect(rows.at(-2)?.querySelector('td')?.textContent).toBe('快捷入口');
+    expect(root.querySelector<HTMLInputElement>('.lastro-shortcut-entry')?.checked).toBe(true);
+    expect(h.save).not.toHaveBeenCalled();
+    expect(h.context.getLastroTeleportConfirmationEnabled()).toBe(true);
+    expect(h.errors).toEqual([]);
+  });
+
+  it('keeps independent saved false values across native close, Escape reopen and graphics reset', async () => {
+    const h = runtime(source, false, false);
+    h.toggle();
+    const root = h.graphics.getRoot(), teleport = root.querySelector<HTMLInputElement>('.lastro-teleport-confirmation')!;
+    const shortcut = root.querySelector<HTMLInputElement>('.lastro-shortcut-entry')!;
+    expect(teleport.checked).toBe(false);
+    expect(shortcut.checked).toBe(false);
+    teleport.checked = true; teleport.dispatchEvent(new Event('change')); await microtasks();
+    expect(h.saved.get('LastROTeleportConfirmation')?.enabled).toBe(true);
+    expect(h.saved.get('LastROShortcutEntry')?.enabled).toBe(false);
+    expect(h.context.getLastroTeleportConfirmationEnabled()).toBe(true);
+    shortcut.checked = true; shortcut.dispatchEvent(new Event('change')); await microtasks();
+    expect(h.saved.get('LastROShortcutEntry')?.enabled).toBe(true);
+    teleport.checked = false; teleport.dispatchEvent(new Event('change')); await microtasks();
+    expect(h.saved.get('LastROTeleportConfirmation')?.enabled).toBe(false);
+    expect(h.saved.get('LastROShortcutEntry')?.enabled).toBe(true);
+    root.querySelector<HTMLButtonElement>('.close')!.click();
+    expect(h.graphics._host?.isConnected).toBe(false);
+    h.toggle();
+    expect(h.graphics.getRoot()).toBe(root);
+    expect(teleport.checked).toBe(false);
+    expect(shortcut.checked).toBe(true);
+    root.querySelector<HTMLButtonElement>('.reset-button')!.click();
+    expect(teleport.checked).toBe(false);
+    expect(shortcut.checked).toBe(true);
+    expect(root.querySelectorAll('.lastro-teleport-confirmation')).toHaveLength(1);
+    expect(h.render).toHaveBeenCalledOnce();
+    expect(h.init).toHaveBeenCalledOnce();
+    expect(h.context.GraphicsOption_default).toBe(h.graphics);
+    expect(h.errors).toEqual([]);
+  });
+
+  it('rolls back a rejected teleport save without committing its cached preference or blocking native controls', async () => {
+    const h = runtime(source, false, true);
+    h.toggle();
+    const root = h.graphics.getRoot(), teleport = root.querySelector<HTMLInputElement>('.lastro-teleport-confirmation')!;
+    h.save.mockRejectedValueOnce(new Error('Storage unavailable'));
+    teleport.checked = false; teleport.dispatchEvent(new Event('change')); await microtasks();
+    expect(teleport.checked).toBe(true);
+    expect(teleport.disabled).toBe(false);
+    expect(h.saved.get('LastROTeleportConfirmation')?.enabled).toBe(true);
+    expect(h.context.getLastroTeleportConfirmationEnabled()).toBe(true);
+    expect(h.saved.get('LastROShortcutEntry')?.enabled).toBe(false);
+    expect(h.errors).toHaveLength(1);
+    expect(String(h.errors[0])).toContain('传送确认设置保存失败');
+    const details = root.querySelector<HTMLInputElement>('.details')!;
+    details.value = '75'; details.dispatchEvent(new Event('change'));
+    expect(h.settings.quality).toBe(75);
+    expect(h.settings.save).toHaveBeenCalledOnce();
+    teleport.checked = false; teleport.dispatchEvent(new Event('change')); await microtasks();
+    expect(h.saved.get('LastROTeleportConfirmation')?.enabled).toBe(false);
+    h.toggle(); h.toggle();
+    expect(teleport.checked).toBe(false);
   });
 });

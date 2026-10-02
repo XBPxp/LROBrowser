@@ -1,7 +1,9 @@
 import { describe, expect, it, vi } from 'vitest';
 import { createLastroWorldMapTeleport } from '../scripts/lastro-worldmap-teleport.mjs';
 
-function fixture(withPrompt = false) {
+const { buildPrivateAirshipRequest } = await import(new URL('../vendor/v2/lastro-v1-migration.mjs', import.meta.url).href);
+
+function fixture(withPrompt = false, shouldConfirmTeleport?: () => boolean) {
   let map = 'prontera.gat', profile = '6:5';
   const pending: Array<{ resolve(value: { approved: boolean }): void; reject(error: Error): void }> = [];
   const preflight = {
@@ -16,7 +18,7 @@ function fixture(withPrompt = false) {
     prompts.push({ message, yes, no, popup }); return popup;
   });
   const api = createLastroWorldMapTeleport({ preflight, getMap: () => map, getProfile: () => profile, send, onSameMap, onError,
-    ...(withPrompt ? { showPrompt } : {}) });
+    ...(withPrompt ? { showPrompt } : {}), ...(shouldConfirmTeleport ? { shouldConfirmTeleport } : {}) });
   return { api, pending, preflight, send, onSameMap, onError, prompts, showPrompt,
     setMap: (value: string) => { map = value; }, setProfile: (value: string) => { profile = value; } };
 }
@@ -169,5 +171,85 @@ describe('verified world map teleports', () => {
     expect(f.showPrompt).toHaveBeenCalledOnce(); expect(f.preflight.check).not.toHaveBeenCalled();
     f.prompts[0]!.yes(); await Promise.resolve(); f.pending[0]!.resolve({ approved: true });
     expect(await first).toBe(true); expect(f.send).toHaveBeenCalledExactlyOnceWith('ein_fild04');
+  });
+
+  it('skips a disabled confirmation while preserving preflight and the real native map-level packet fields', async () => {
+    const f = fixture(true, () => false), packets: unknown[] = [];
+    f.send.mockImplementation(mapname => packets.push(buildPrivateAirshipRequest({ mapname })));
+    const result = f.api.request(' EIN_FILD04.GAT ', '艾音布罗克原野');
+    expect(f.showPrompt).not.toHaveBeenCalled();
+    expect(f.preflight.check).toHaveBeenCalledExactlyOnceWith({ outset: ['ein_fild04', 0, 0] });
+    expect(packets).toEqual([]);
+    f.pending[0]!.resolve({ approved: true });
+    expect(await result).toBe(true);
+    expect(packets).toEqual([{ mapname: 'ein_fild04', x: 0, y: 0, type: 0, itemid: 14527 }]);
+    expect(f.send).toHaveBeenCalledExactlyOnceWith('ein_fild04'); expect(f.onError).not.toHaveBeenCalled();
+  });
+
+  it('does not send when a disabled confirmation is followed by a failed resource approval', async () => {
+    const f = fixture(true, () => false), result = f.api.request('ein_fild04');
+    expect(f.showPrompt).not.toHaveBeenCalled(); expect(f.send).not.toHaveBeenCalled();
+    f.pending[0]!.resolve({ approved: false });
+    expect(await result).toBe(false); expect(f.send).not.toHaveBeenCalled();
+    expect(f.onError.mock.calls[0]?.[0]).toMatchObject({ message: '传送地点未通过检查。' });
+  });
+
+  it.each(['map', 'profile'])('still rejects a changed %s while preflight waits with confirmation disabled', async field => {
+    const f = fixture(true, () => false), result = f.api.request('ein_fild04');
+    expect(f.showPrompt).not.toHaveBeenCalled();
+    if (field === 'map') f.setMap('geffen.gat'); else f.setProfile('3:3');
+    f.pending[0]!.resolve({ approved: true });
+    expect(await result).toBe(false); expect(f.send).not.toHaveBeenCalled();
+    expect(f.onError.mock.calls[0]?.[0]).toMatchObject({ message: '当前地图或区服已变化，请重新选择地点。' });
+  });
+
+  it('cancels pending preflight without a popup and silences both late approval and late resource failure', async () => {
+    const f = fixture(true, () => false), first = f.api.request('ein_fild04');
+    expect(f.showPrompt).not.toHaveBeenCalled();
+    f.api.cancelPending(); f.pending[0]!.resolve({ approved: true }); expect(await first).toBe(false);
+    const second = f.api.request('payon'); f.api.cancelPending();
+    f.pending[1]!.reject(new Error('stale missing resource')); expect(await second).toBe(false);
+    expect(f.showPrompt).not.toHaveBeenCalled(); expect(f.send).not.toHaveBeenCalled(); expect(f.onError).not.toHaveBeenCalled();
+  });
+
+  it.each(['ein_fild04', 'payon'])('sends only the latest preflight result for %s when confirmation is disabled', async target => {
+    const f = fixture(true, () => false), first = f.api.request('ein_fild04'), second = f.api.request(target);
+    expect(f.showPrompt).not.toHaveBeenCalled(); expect(f.preflight.check).toHaveBeenCalledTimes(2);
+    f.pending[1]!.resolve({ approved: true }); expect(await second).toBe(true);
+    f.pending[0]!.resolve({ approved: true }); expect(await first).toBe(false);
+    expect(f.send).toHaveBeenCalledExactlyOnceWith(target); expect(f.onError).not.toHaveBeenCalled();
+  });
+
+  it('reads the confirmation preference for each new request and restores the native prompt after reenabling it', async () => {
+    let enabled = false;
+    const f = fixture(true, () => enabled), skipped = f.api.request('ein_fild04');
+    expect(f.showPrompt).not.toHaveBeenCalled(); f.pending[0]!.resolve({ approved: true }); expect(await skipped).toBe(true);
+    enabled = true;
+    const confirmed = f.api.request('payon');
+    expect(f.showPrompt).toHaveBeenCalledOnce(); expect(f.preflight.check).toHaveBeenCalledTimes(1);
+    f.prompts[0]!.yes(); await Promise.resolve();
+    expect(f.preflight.check).toHaveBeenCalledTimes(2);
+    f.pending[1]!.resolve({ approved: true }); expect(await confirmed).toBe(true);
+    expect(f.send.mock.calls).toEqual([['ein_fild04'], ['payon']]);
+  });
+
+  it('does not approve an existing popup or replace it when confirmation is disabled during its lifetime', async () => {
+    let enabled = true;
+    const f = fixture(true, () => enabled), first = f.api.request('ein_fild04');
+    enabled = false;
+    expect(await f.api.request('payon')).toBe(false);
+    expect(f.showPrompt).toHaveBeenCalledOnce(); expect(f.preflight.check).not.toHaveBeenCalled();
+    f.prompts[0]!.no(); expect(await first).toBe(false);
+    const next = f.api.request('payon');
+    expect(f.showPrompt).toHaveBeenCalledOnce(); expect(f.preflight.check).toHaveBeenCalledExactlyOnceWith({ outset: ['payon', 0, 0] });
+    f.pending[0]!.resolve({ approved: true }); expect(await next).toBe(true);
+    expect(f.send).toHaveBeenCalledExactlyOnceWith('payon');
+  });
+
+  it.each([undefined, null, 0, 'false'])('keeps confirmation enabled unless the preference is strictly false: %s', async value => {
+    // JavaScript callers or malformed persisted values can violate the type.
+    const f = fixture(true, () => value as unknown as boolean), result = f.api.request('ein_fild04');
+    expect(f.showPrompt).toHaveBeenCalledOnce(); expect(f.preflight.check).not.toHaveBeenCalled(); expect(f.send).not.toHaveBeenCalled();
+    f.prompts[0]!.no(); expect(await result).toBe(false);
   });
 });

@@ -1,5 +1,5 @@
 // Serialized into Online.js by the runtime patcher; keep dependencies explicit.
-export function createLastroChatMapLinks({ setHtml, showPrompt, teleport, canTeleport = () => true, getMap, navigate, onError }) {
+export function createLastroChatMapLinks({ setHtml, showPrompt, shouldConfirmTeleport = () => true, teleport, canTeleport = () => true, getMap, navigate, onError }) {
   let promptOpen = false;
   const trustedLinks = new WeakMap();
 
@@ -253,6 +253,10 @@ export function createLastroChatMapLinks({ setHtml, showPrompt, teleport, canTel
         return true;
       }
       if (!canTeleport()) return false;
+      if (shouldConfirmTeleport() === false) {
+        travel(target);
+        return true;
+      }
       promptOpen = true;
       let settled = false;
       const finish = confirmed => {

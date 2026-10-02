@@ -1,5 +1,5 @@
 // Serialized into the runtime; sending a map-level warp stays in the adapter.
-export function createLastroWorldMapTeleport({ preflight, getMap, getProfile, send, onSameMap, onError, showPrompt }) {
+export function createLastroWorldMapTeleport({ preflight, getMap, getProfile, send, onSameMap, onError, showPrompt, shouldConfirmTeleport = () => true }) {
   if (typeof preflight?.check !== 'function' || typeof preflight?.cancel !== 'function'
     || typeof getMap !== 'function' || typeof getProfile !== 'function' || typeof send !== 'function') {
     throw new TypeError('World map teleport requires preflight, map, profile, and send functions');
@@ -59,7 +59,7 @@ export function createLastroWorldMapTeleport({ preflight, getMap, getProfile, se
         onSameMap?.(id);
         return false;
       }
-      if (typeof showPrompt === 'function') {
+      if (typeof showPrompt === 'function' && shouldConfirmTeleport() !== false) {
         if (!await confirm(id, label) || token !== generation) return false;
         if (origin !== getMap() || profile !== getProfile()) throw new Error('当前地图或区服已变化，请重新选择地点。');
       }

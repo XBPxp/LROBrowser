@@ -44,7 +44,7 @@ const model = runInNewContext(`(${fixture.createWorldMapIndex})(worldData,mobDat
 function mount(loadData = vi.fn(async () => data), itemTable: Record<number, { identifiedDisplayName: string }> = items, monsterPortrait = vi.fn(async (_id: number) => { void _id; return 'data:image/png;base64,AAAA'; }), prepared = true) {
   const host = document.createElement('div'); if (prepared) document.body.append(host);
   const root = host.attachShadow({ mode: 'open' }); root.innerHTML = `<style>${commonCss}</style><style>${fixture.css}</style><div class="ui-component-root">${fixture.html}</div>`;
-  const component = { _host: host, getRoot: () => root, prepare: vi.fn(() => { component.init(); host.remove(); }), append: vi.fn(() => { document.body.append(host); component.onAppend(); }), focus: vi.fn(), searchMonster: async (_target: unknown) => { void _target; }, init: () => {}, onAppend: () => {}, toggle: () => {}, onRemove: () => {}, onResize: () => {}, updatePartyMembers: (_pkt: unknown) => { void _pkt; } };
+  const component = { _host: host, getRoot: () => root, prepare: vi.fn(() => { component.init(); host.remove(); }), append: vi.fn(() => { document.body.append(host); component.onAppend(); }), remove: vi.fn(() => { if (host.isConnected) { component.onRemove(); host.remove(); } }), focus: vi.fn(), searchMonster: async (_target: unknown) => { void _target; }, init: () => {}, onAppend: () => {}, toggle: () => {}, onRemove: () => {}, onResize: () => {}, updatePartyMembers: (_pkt: unknown) => { void _pkt; } };
   const navigate = vi.fn(), teleport = vi.fn<(mapid: string, label?: string) => void | Promise<boolean>>(), cancelTeleport = vi.fn();
   const Client = { loadFile: vi.fn((_path: string, _done: (url: string) => void, fail?: () => void) => fail?.()) };
   const api = runInNewContext(`(${fixture.installLastroWorldMap})(component,deps,regions,(${fixture.createWorldMapIndex}))`, {
@@ -62,7 +62,7 @@ const flush = async () => { for (let i = 0; i < 8; i++) await Promise.resolve();
 
 const frames: HTMLIFrameElement[] = [];
 afterEach(() => { frames.splice(0).forEach(frame => frame.remove()); });
-function mountNative(scale = 1) {
+function mountNative(scale = 1, options: { loadData?: () => Promise<typeof data>; itemTable?: Record<number, { identifiedDisplayName: string }> } = {}) {
   const frame = document.createElement('iframe'); document.body.append(frame); frames.push(frame);
   const win = frame.contentWindow as Window & typeof globalThis, doc = win.document;
   doc.body.style.zoom = String(scale);
@@ -88,21 +88,28 @@ function mountNative(scale = 1) {
       return { x: left, y: top, left, top, right: left + width, bottom: top + height, width, height, toJSON: () => ({}) };
     });
   };
+  const navigate = vi.fn(), teleport = vi.fn<(mapid: string, label?: string) => void | Promise<boolean>>(), cancelTeleport = vi.fn();
+  const loadData = options.loadData || vi.fn(async () => data);
+  const itemTable: Record<number, { identifiedDisplayName: string }> = options.itemTable || items;
   const api = runInNewContext(`(${fixture.installLastroWorldMap})(component,deps,regions,(${fixture.createWorldMapIndex}))`, {
     component, regions: fixture.regions,
-    deps: { document: doc, DB: { INTERFACE_PATH: '', getItemInfo: () => ({}) },
+    deps: { document: doc, DB: { INTERFACE_PATH: '', getItemInfo: (id: number) => itemTable[id] || {} },
       Client: { loadFile: (_path: string, _done: unknown, failed: () => void) => failed() },
-      loadData: async () => data, itemTable: () => items },
+      loadData, itemTable: () => itemTable, currentMap: () => 'prontera.gat', navigate, teleport, cancelTeleport },
   });
   const root = () => component.getRoot() as ShadowRoot;
   const key = (value: string, target: EventTarget = win, options: KeyboardEventInit = {}) => {
     const event = new win.KeyboardEvent('keydown', { key: value, bubbles: true, composed: true, cancelable: true, ...options });
     target.dispatchEvent(event); return event;
   };
-  return { component, api, root, win, doc, key };
+  const click = (text: string) => {
+    const element = [...root().querySelectorAll('button')].find(button => button.textContent === text);
+    if (!element) throw new Error('Missing native button ' + text); element.click();
+  };
+  return { component, api, root, win, doc, key, click, navigate, teleport, cancelTeleport, loadData };
 }
 
-function installVerifiedWarp(f: ReturnType<typeof mount>) {
+function installVerifiedWarp(f: Pick<ReturnType<typeof mount>, 'teleport' | 'cancelTeleport'>) {
   let resolve!: (value: { approved: boolean }) => void;
   const preflight = { check: vi.fn(() => new Promise<{ approved: boolean }>(done => { resolve = done; })), cancel: vi.fn() };
   const send = vi.fn(), onError = vi.fn();
@@ -148,6 +155,184 @@ describe('packaged official-style world map', () => {
     f.win.dispatchEvent(new f.win.Event('resize'));
     expect(host.getBoundingClientRect().width).toBeCloseTo(640);
     expect(host.getBoundingClientRect().height).toBeCloseTo(400);
+    f.component.remove();
+  });
+  it.each([false, true])('restores the typed search, filter and result page after a same-map remove/append (new DOM: %s)', async rebuild => {
+    const catalog = Object.fromEntries(Array.from({ length: 125 }, (_, i) => [5000 + i, { identifiedDisplayName: `测试道具${i}` }]));
+    const f = mountNative(1, { itemTable: catalog }); await f.api.open({ kind: 'search' });
+    const input = f.root().querySelector<HTMLInputElement>('.wm-form input')!;
+    const type = f.root().querySelector<HTMLSelectElement>('.wm-form select')!;
+    type.value = 'item'; type.dispatchEvent(new f.win.Event('change'));
+    input.value = '测试道具'; input.dispatchEvent(new f.win.Event('input')); f.click('下一页');
+    const ids = [...f.root().querySelectorAll('.wm-search-results .wm-card')].map(card => card.getAttribute('data-id'));
+    expect(ids).toHaveLength(60); expect(f.root().querySelector('.wm-page')?.textContent).toContain('2 / 3');
+    const oldHost = f.component._host, oldRoot = f.root();
+    // Map teardown removes every GUI even when a random teleport stays on prontera.
+    f.component.remove(); expect(oldHost.isConnected).toBe(false);
+    if (rebuild) { f.component.__loaded = false; f.component.prepare(); }
+    f.component.append(); f.component.toggle(); await flush();
+    expect(f.component.__active).toBe(true); expect(f.component._host.isConnected).toBe(true);
+    expect(f.root() === oldRoot).toBe(!rebuild);
+    expect(f.root().querySelector<HTMLElement>('.wm-panel')!.hidden).toBe(false);
+    expect(f.root().querySelector<HTMLInputElement>('.wm-form input')?.value).toBe('测试道具');
+    expect(f.root().querySelector<HTMLSelectElement>('.wm-form select')?.value).toBe('item');
+    expect(f.root().querySelector('.wm-page')?.textContent).toContain('2 / 3');
+    expect([...f.root().querySelectorAll('.wm-search-results .wm-card')].map(card => card.getAttribute('data-id'))).toEqual(ids);
+    expect(f.root().querySelector('.wm-search-results')?.textContent).toContain('找到 125 条结果');
+    expect(f.root().activeElement?.closest('.wm-panel')).toBe(f.root().querySelector('.wm-panel'));
+    f.click('下一页'); expect(f.root().querySelectorAll('.wm-search-results .wm-card')).toHaveLength(5);
+    expect(f.loadData).toHaveBeenCalledTimes(1); f.component.remove();
+  });
+  it.each([false, true])('restores an exact external monster target and its inline details on ordinary toggle (new DOM: %s)', async rebuild => {
+    const f = mountNative(1, { loadData: vi.fn(async () => ({ ...data, mobData: { ...data.mobData, 11002: { kName: '测试波利', LV: '2' } } })) });
+    await f.api.searchMonster({ id: 1002, name: '巴风特' });
+    f.component.remove(); if (rebuild) { f.component.__loaded = false; f.component.prepare(); }
+    f.component.append(); f.component.toggle(); await flush();
+    expect(f.root().querySelector<HTMLInputElement>('.wm-form input')?.value).toBe('1002');
+    expect(f.root().querySelector<HTMLSelectElement>('.wm-form select')?.value).toBe('monster');
+    expect(f.root().querySelectorAll('.wm-search-results .wm-card')).toHaveLength(1);
+    expect(f.root().querySelector('.wm-monster-detail')?.getAttribute('data-id')).toBe('1002');
+    expect(f.root().querySelector('.wm-monster-detail')?.textContent).toContain('波利 · Lv.1');
+    expect(f.root().querySelector('.wm-search-results .wm-card')?.getAttribute('aria-pressed')).toBe('true');
+    const input = f.root().querySelector<HTMLInputElement>('.wm-form input')!;
+    input.dispatchEvent(new f.win.Event('input'));
+    expect(f.root().querySelectorAll('.wm-search-results .wm-card')).toHaveLength(2);
+    f.component.remove();
+  });
+  it.each([false, true])('restores selected map details and the search Return path without reopening an item popup (new DOM: %s)', async rebuild => {
+    const f = mountNative(); await f.api.open({ kind: 'search' });
+    const input = f.root().querySelector<HTMLInputElement>('.wm-form input')!, type = f.root().querySelector<HTMLSelectElement>('.wm-form select')!;
+    type.value = 'map'; type.dispatchEvent(new f.win.Event('change'));
+    input.value = 'prontera'; input.dispatchEvent(new f.win.Event('input'));
+    f.root().querySelector<HTMLButtonElement>('.wm-search-results .wm-card[data-id="prontera"]')!.click(); await flush();
+    f.root().querySelector<HTMLButtonElement>('.wm-context .wm-card[data-kind="monster"]')!.click(); await flush();
+    f.root().querySelector<HTMLButtonElement>('.wm-monster-detail .wm-card[data-kind="item"]')!.click(); await flush();
+    expect(f.root().querySelector('.wm-item-window')).not.toBeNull();
+    f.component.remove(); if (rebuild) { f.component.__loaded = false; f.component.prepare(); }
+    f.component.append(); f.component.toggle(); await flush();
+    expect(f.root().querySelector('.wm-title')?.textContent).toBe('普隆德拉 · prontera');
+    expect(f.root().querySelector('.wm-map-image img')?.getAttribute('alt')).toBe('普隆德拉地图大图');
+    expect(f.root().querySelector('.wm-monster-detail')?.getAttribute('data-id')).toBe('1002');
+    expect(f.root().querySelector('.wm-tile.selected')?.getAttribute('data-map-id')).toBe('prontera');
+    expect(f.root().querySelector('.wm-item-window')).toBeNull();
+    f.click('返回'); await flush();
+    expect(f.root().querySelector<HTMLInputElement>('.wm-form input')?.value).toBe('prontera');
+    expect(f.root().querySelector<HTMLSelectElement>('.wm-form select')?.value).toBe('map');
+    expect(f.root().querySelector('.wm-search-results .wm-card')?.getAttribute('data-id')).toBe('prontera');
+    f.component.remove();
+  });
+  it.each(['search', 'map', 'item'])('uses the shared Close control to remove the native world map from the %s view and release game keys', async view => {
+    const f = mountNative(); await f.api.open({ kind: view === 'map' ? 'map' : 'search', id: 'prontera' });
+    if (view === 'item') await f.api.open({ kind: 'item', id: 501 });
+    const close = f.root().querySelector<HTMLButtonElement>('.wm-close')!;
+    expect(close.textContent).toBe('关闭'); expect(close.getAttribute('aria-label')).toBe('关闭世界地图');
+    expect(f.root().querySelectorAll('.wm-close')).toHaveLength(1);
+    expect(close.closest('.wm-toolbar,.wm-panel,.wm-item-window')).toBeNull();
+    expect(close.parentElement).toBe(f.root().querySelector('#WorldMap'));
+    // jsdom cannot hit-test stacked Shadow DOM elements; verify the declared
+    // stacking rule too, so a programmatic click cannot hide an obscured control.
+    const closeStyles = fixture.css.match(/(?:#WorldMap\s+)?\.wm-close\{([^}]+)\}/)?.[1] || '';
+    expect(Number(closeStyles.match(/z-index:(\d+)/)?.[1])).toBeGreaterThan(10);
+    const remove = vi.spyOn(f.component, 'remove'), game = vi.fn(); f.win.addEventListener('keydown', game);
+    close.click();
+    expect(remove).toHaveBeenCalledTimes(1); expect(f.component.__active).toBe(false);
+    expect(f.component._host.isConnected).toBe(false); expect(f.root().querySelector('.wm-item-window')).toBeNull();
+    for (const value of ['Escape', 'Enter', 'F2']) expect(f.key(value).defaultPrevented).toBe(false);
+    expect(game).toHaveBeenCalledTimes(3);
+  });
+  it('cancels a pending verified warp through Close and ignores late approval without reopening stale details', async () => {
+    const f = mountNative(), warp = installVerifiedWarp(f); await f.api.open({ kind: 'map', id: 'test_dun' });
+    f.click('传送到此地图'); const cancels = f.cancelTeleport.mock.calls.length;
+    expect(warp.send).not.toHaveBeenCalled();
+    f.root().querySelector<HTMLButtonElement>('.wm-close')!.click();
+    expect(f.cancelTeleport).toHaveBeenCalledTimes(cancels + 1); expect(f.component.__active).toBe(false);
+    warp.approve(); await flush();
+    expect(warp.send).not.toHaveBeenCalled(); expect(warp.onError).not.toHaveBeenCalled();
+    expect(f.component._host.isConnected).toBe(false);
+    f.component.toggle(); await flush();
+    expect(f.root().querySelector<HTMLElement>('.wm-panel')!.hidden).toBe(true);
+    await f.api.open({ kind: 'map', id: 'test_dun' });
+    const button = [...f.root().querySelectorAll('button')].find(button => button.textContent === '传送到此地图')!;
+    expect(button.disabled).toBe(false); f.component.remove();
+  });
+  it('restores the last query and map after successful teleport hides the window and map teardown removes it', async () => {
+    const f = mountNative(), warp = installVerifiedWarp(f); await f.api.open({ kind: 'search' });
+    const input = f.root().querySelector<HTMLInputElement>('.wm-form input')!;
+    input.value = '地下城'; input.dispatchEvent(new f.win.Event('input'));
+    f.root().querySelector<HTMLButtonElement>('.wm-search-results .wm-card[data-id="test_dun"]')!.click(); await flush();
+    f.click('传送到此地图'); warp.approve(); await flush();
+    expect(warp.send).toHaveBeenCalledExactlyOnceWith('test_dun'); expect(f.component._host.style.display).toBe('none');
+    f.component.remove(); f.component.append(); f.component.toggle(); await flush();
+    expect(f.root().querySelector('.wm-title')?.textContent).toBe('测试地下城 · test_dun');
+    f.click('返回'); await flush();
+    expect(f.root().querySelector<HTMLInputElement>('.wm-form input')?.value).toBe('地下城');
+    expect(f.root().querySelector('.wm-search-results .wm-card')?.getAttribute('data-id')).toBe('test_dun');
+    expect(warp.send).toHaveBeenCalledTimes(1); f.component.remove();
+  });
+  it.each(['close', 'remove'])('does not repaint or steal focus when a delayed external search resolves after native %s', async action => {
+    let resolve!: (value: typeof data) => void;
+    const f = mountNative(1, { loadData: vi.fn(() => new Promise<typeof data>(done => { resolve = done; })) });
+    const pending = f.api.searchMonster({ id: 1002 });
+    if (action === 'close') f.root().querySelector<HTMLButtonElement>('.wm-close')!.click(); else f.component.remove();
+    const external = f.doc.createElement('input'); f.doc.body.append(external); external.focus();
+    resolve(data); await pending; await flush();
+    expect(f.component.__active).toBe(false); expect(f.component._host.isConnected).toBe(false);
+    expect(f.root().querySelector('.wm-monster-detail')).toBeNull(); expect(f.doc.activeElement).toBe(external);
+    f.component.toggle(); await flush();
+    if (action === 'remove') {
+      expect(f.root().querySelector<HTMLInputElement>('.wm-form input')?.value).toBe('1002');
+      expect(f.root().querySelector('.wm-monster-detail')?.getAttribute('data-id')).toBe('1002');
+      expect(f.root().activeElement?.closest('.wm-panel')).toBe(f.root().querySelector('.wm-panel'));
+    } else {
+      expect(f.root().querySelector<HTMLElement>('.wm-panel')!.hidden).toBe(true);
+      expect(f.root().querySelector('.wm-monster-detail')).toBeNull();
+    }
+    f.component.remove();
+  });
+  it('restores a pending name-only external search and its unique exact match after native removal', async () => {
+    let resolve!: (value: typeof data) => void;
+    const f = mountNative(1, { loadData: vi.fn(() => new Promise<typeof data>(done => { resolve = done; })) });
+    const pending = f.api.searchMonster({ name: '  ^ff0000波利^000000  ' });
+    f.component.remove(); resolve(data); await pending;
+    expect(f.component._host.isConnected).toBe(false); expect(f.root().querySelector('.wm-monster-detail')).toBeNull();
+    f.component.toggle(); await flush();
+    expect(f.root().querySelector<HTMLInputElement>('.wm-form input')?.value).toBe('波利');
+    expect(f.root().querySelector<HTMLSelectElement>('.wm-form select')?.value).toBe('monster');
+    expect(f.root().querySelectorAll('.wm-search-results .wm-card')).toHaveLength(1);
+    expect(f.root().querySelector('.wm-monster-detail')?.getAttribute('data-id')).toBe('1002');
+    expect(f.root().querySelector('.wm-search-results .wm-card')?.getAttribute('aria-pressed')).toBe('true');
+    f.component.remove();
+  });
+  it('preserves an unknown explicit monster ID without introducing an inspector or selecting its name on reopening', async () => {
+    const f = mountNative(); await f.api.searchMonster({ id: 100, name: '波利' });
+    expect(f.root().querySelector('.wm-monster-detail')).toBeNull();
+    expect(f.root().querySelectorAll('.wm-search-results .wm-card')).toHaveLength(0);
+    f.component.remove(); f.component.toggle(); await flush();
+    expect(f.root().querySelector<HTMLInputElement>('.wm-form input')?.value).toBe('100');
+    expect(f.root().querySelector<HTMLSelectElement>('.wm-form select')?.value).toBe('monster');
+    expect(f.root().querySelector('.wm-search-results')?.textContent).toContain('没有匹配结果');
+    expect(f.root().querySelectorAll('.wm-search-results .wm-card')).toHaveLength(0);
+    expect(f.root().querySelector('.wm-monster-detail')).toBeNull(); f.component.remove();
+  });
+  it('retains the pending external target through removal, a failed restoration and successful Retry', async () => {
+    let reject!: (error: Error) => void;
+    const load = vi.fn<() => Promise<typeof data>>()
+      .mockImplementationOnce(() => new Promise((_resolve, failed) => { reject = failed; }))
+      .mockRejectedValueOnce(new Error('still offline')).mockResolvedValue(data);
+    const f = mountNative(1, { loadData: load });
+    const pending = f.api.searchMonster({ id: 1002, name: '巴风特' });
+    f.component.remove(); reject(new Error('offline')); await pending;
+    expect(f.root().querySelector('.wm-monster-detail')).toBeNull();
+    f.component.toggle(); await flush();
+    expect(f.root().querySelector('.wm-title')?.textContent).toBe('资料加载失败');
+    expect(load).toHaveBeenCalledTimes(2);
+    f.click('重试'); await flush();
+    expect(load).toHaveBeenCalledTimes(3);
+    expect(f.root().querySelector<HTMLInputElement>('.wm-form input')?.value).toBe('1002');
+    expect(f.root().querySelector<HTMLSelectElement>('.wm-form select')?.value).toBe('monster');
+    expect(f.root().querySelectorAll('.wm-search-results .wm-card')).toHaveLength(1);
+    expect(f.root().querySelector('.wm-monster-detail')?.getAttribute('data-id')).toBe('1002');
+    expect(f.root().querySelector('.wm-search-results .wm-card')?.getAttribute('aria-pressed')).toBe('true');
     f.component.remove();
   });
   it.each([1, 1.5].flatMap(scale => [[1280, 720], [720, 1280], [360, 360]].map(([width, height]) => [scale, width!, height!])))('fits all four continents inside the available canvas at %s scale and %s×%s viewport', async (scale, width, height) => {

@@ -81,13 +81,13 @@ describe('teleport resource preflight', () => {
     },
   );
 
-  it('validates every outset/path point, deduplicates maps, and shares resource reads only within one check', async () => {
+  it('validates every outset/path point, deduplicates maps, and reuses validated metadata on later checks', async () => {
     const check = fixture({ 'data/other.rsw': rsw() });
     const input = { outset: ['destination', 0, 0], path: [['other', 10, 20], ['destination', 19, 29]] };
     expect((await check.check(input)).maps.map((map) => map.mapname)).toEqual(['destination', 'other']);
     expect(check.loadFile).toHaveBeenCalledTimes(4);
     await check.check(input);
-    expect(check.loadFile).toHaveBeenCalledTimes(8);
+    expect(check.loadFile).toHaveBeenCalledTimes(4);
   });
 
   it('checks a later destination even if the outset has valid resources', async () => {
@@ -336,5 +336,171 @@ describe('teleport resource preflight', () => {
       message: '无法读取地图资源：data/destination.rsw',
       code: 'RESOURCE_LOAD_FAILED', resource: 'data/destination.rsw',
     });
+  });
+
+  it('rechecks coordinates and current map on a warm metadata hit without caching route approval', async () => {
+    const check = fixture();
+    await check.check(route());
+    await expect(check.check({ path: [['destination', 20, 0]] })).rejects.toMatchObject({ code: 'OUT_OF_BOUNDS' });
+    await expect(check.check({ path: [['destination', 0, 0]] })).resolves.toMatchObject({ approved: true });
+    expect(check.loadFile).toHaveBeenCalledTimes(3);
+    check.setMap(undefined);
+    await expect(check.check(route())).rejects.toMatchObject({ code: 'MAP_NOT_READY' });
+    expect(check.loadFile).toHaveBeenCalledTimes(3);
+  });
+
+  it('returns fresh metadata objects so a caller cannot alter the cached dimensions or references', async () => {
+    const check = fixture();
+    const first = await check.check(route());
+    Object.assign(first.maps[0]!, { width: 65536, gat: 'data/unsafe.gat', mapname: 'other' });
+    first.maps.push({ ...first.maps[0]! });
+    const second = await check.check(route());
+    expect(second.maps).toEqual([{ mapname: 'destination', width: 20, height: 30,
+      rsw: 'data/destination.rsw', gnd: 'data/terrain.gnd', gat: 'data/altitude.gat' }]);
+    await expect(check.check({ path: [['destination', 30, 0]] })).rejects.toMatchObject({ code: 'OUT_OF_BOUNDS' });
+    expect(check.loadFile).toHaveBeenCalledTimes(3);
+  });
+
+  it('shares physical instance metadata but preserves each full server map ID and its coordinate checks', async () => {
+    const check = fixture({ 'data/1@abc.rsw': rsw() });
+    const first = await check.check({ path: [['1231@abc', 1, 2], ['4561@abc', 19, 29]] });
+    expect(first.maps.map((map) => map.mapname)).toEqual(['1231@abc', '4561@abc']);
+    expect(check.loadFile).toHaveBeenCalledTimes(3);
+    await check.check({ path: [['789#1@abc', 0, 0]] });
+    await expect(check.check({ path: [['789#1@abc', 20, 0]] })).rejects.toMatchObject({ code: 'OUT_OF_BOUNDS' });
+    expect(check.loadFile).toHaveBeenCalledTimes(3);
+  });
+
+  it('expires metadata five minutes after validation even when it has been used recently', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    try {
+      vi.setSystemTime(1_000_000);
+      const check = fixture();
+      await check.check(route());
+      vi.setSystemTime(1_299_999);
+      await check.check(route());
+      expect(check.loadFile).toHaveBeenCalledTimes(3);
+      vi.setSystemTime(1_300_000);
+      await check.check(route());
+      expect(check.loadFile).toHaveBeenCalledTimes(6);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('retains at most 64 physical maps and evicts the least recently used map', async () => {
+    const loadFile = vi.fn(async (name: string) => name.endsWith('.rsw') ? rsw() : name.endsWith('.gnd') ? gnd() : gat());
+    const check = createLastroTeleportPreflight({ loadFile, getMap: () => 'izlude' });
+    const visit = (index: number) => check.check({ path: [[`map${index}`, 0, 0]] });
+    for (let index = 0; index < 64; index++) await visit(index);
+    await visit(0);
+    await visit(64);
+    await visit(1);
+    await visit(0);
+    expect(loadFile).toHaveBeenCalledTimes(198);
+    expect(loadFile.mock.calls.filter(([name]) => name === 'data/map0.rsw')).toHaveLength(1);
+    expect(loadFile.mock.calls.filter(([name]) => name === 'data/map1.rsw')).toHaveLength(2);
+  });
+
+  it('clears successful metadata whenever the server profile changes, including switching back', async () => {
+    let profile = '1:20260101';
+    const check = fixture();
+    const preflight = createLastroTeleportPreflight({ loadFile: check.loadFile, getMap: check.getMap, getProfile: () => profile });
+    await preflight.check(route());
+    await preflight.check(route());
+    expect(check.loadFile).toHaveBeenCalledTimes(3);
+    profile = '2:20260101';
+    await preflight.check(route());
+    expect(check.loadFile).toHaveBeenCalledTimes(6);
+    profile = '1:20260101';
+    await preflight.check(route());
+    expect(check.loadFile).toHaveBeenCalledTimes(9);
+  });
+
+  it('rejects a profile change during a pending resource read and does not cache its late result', async () => {
+    let profile = '1:20260101';
+    const pending = deferred<ArrayBuffer>();
+    const check = fixture();
+    check.loadFile.mockImplementationOnce(() => pending.promise);
+    const preflight = createLastroTeleportPreflight({ loadFile: check.loadFile, getMap: check.getMap, getProfile: () => profile });
+    const outcome = preflight.check(route()).catch((error: unknown) => error);
+    await vi.waitFor(() => expect(check.loadFile).toHaveBeenCalledTimes(1));
+    profile = '2:20260101';
+    pending.resolve(rsw());
+    expect(await outcome).toMatchObject({ name: 'AbortError', code: 'CANCELLED' });
+    await preflight.check(route());
+    expect(check.loadFile).toHaveBeenCalledTimes(4);
+  });
+
+  it('checks profile and cancellation again before returning a warm approval', async () => {
+    let profile = 'one';
+    const check = fixture();
+    const getProfile = vi.fn(() => profile);
+    const preflight = createLastroTeleportPreflight({ loadFile: check.loadFile, getMap: check.getMap, getProfile });
+    await preflight.check(route());
+    getProfile.mockImplementationOnce(() => 'one').mockImplementation(() => 'two');
+    await expect(preflight.check(route())).rejects.toMatchObject({ name: 'AbortError' });
+    profile = 'two';
+    getProfile.mockImplementation(() => profile);
+    await preflight.check(route());
+    const warm = preflight.check(route());
+    preflight.cancel();
+    await expect(warm).rejects.toMatchObject({ name: 'AbortError' });
+    expect(check.loadFile).toHaveBeenCalledTimes(6);
+  });
+
+  it('does not cache fresh metadata when the route fails coordinate validation', async () => {
+    const check = fixture();
+    await expect(check.check({ path: [['destination', 20, 0]] })).rejects.toMatchObject({ code: 'OUT_OF_BOUNDS' });
+    await check.check(route());
+    expect(check.loadFile).toHaveBeenCalledTimes(6);
+  });
+
+  it.each(['failure', 'cancel'] as const)('does not cache a completed map when another map ends in %s', async (ending) => {
+    const pending = deferred<ArrayBuffer>();
+    const check = fixture();
+    const nativeLoad = check.loadFile.getMockImplementation()!;
+    check.loadFile.mockImplementation((name) => name === 'data/other.rsw' ? pending.promise : nativeLoad(name));
+    const outcome = check.check({ path: [['destination', 0, 0], ['other', 0, 0]] }).catch((error: unknown) => error);
+    await vi.waitFor(() => expect(check.loadFile).toHaveBeenCalledWith('data/altitude.gat'));
+    await Promise.resolve();
+    if (ending === 'cancel') check.cancel();
+    else pending.resolve(new ArrayBuffer(100));
+    expect(await outcome).toMatchObject({ code: ending === 'cancel' ? 'CANCELLED' : 'INVALID_RESOURCE' });
+    const before = check.loadFile.mock.calls.length;
+    await check.check(route());
+    expect(check.loadFile).toHaveBeenCalledTimes(before + 3);
+    pending.resolve(rsw());
+    await Promise.resolve();
+    await check.check(route());
+    expect(check.loadFile).toHaveBeenCalledTimes(before + 3);
+  });
+
+  it('validates at most two cold physical maps concurrently and returns them in route order', async () => {
+    const altitude = new Map(['first', 'second', 'third'].map((name) => [name, deferred<ArrayBuffer>()]));
+    let activeMaps = 0;
+    let maximum = 0;
+    const loadFile = vi.fn(async (resource: string) => {
+      const name = resource.slice(5).split('.')[0]!;
+      if (resource.endsWith('.rsw')) {
+        maximum = Math.max(maximum, ++activeMaps);
+        return rsw(`${name}.gnd`, `${name}.gat`);
+      }
+      if (resource.endsWith('.gnd')) return gnd();
+      return altitude.get(name)!.promise.finally(() => { activeMaps--; });
+    });
+    const check = createLastroTeleportPreflight({ loadFile, getMap: () => 'izlude' });
+    const approval = check.check({ path: [['first', 0, 0], ['second', 0, 0], ['third', 0, 0]] });
+    await vi.waitFor(() => expect(loadFile).toHaveBeenCalledWith('data/second.gat'));
+    expect(loadFile).toHaveBeenCalledWith('data/first.gat');
+    expect(loadFile).not.toHaveBeenCalledWith('data/third.rsw');
+    altitude.get('second')!.resolve(gat());
+    await vi.waitFor(() => expect(loadFile).toHaveBeenCalledWith('data/third.gat'));
+    altitude.get('third')!.resolve(gat());
+    altitude.get('first')!.resolve(gat());
+    expect((await approval).maps.map((map) => map.mapname)).toEqual(['first', 'second', 'third']);
+    expect(maximum).toBe(2);
+    expect(activeMaps).toBe(0);
+    expect(loadFile).toHaveBeenCalledTimes(9);
   });
 });

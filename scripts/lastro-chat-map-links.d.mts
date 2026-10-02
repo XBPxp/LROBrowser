@@ -5,6 +5,7 @@ export interface ChatMapPrompt {
 export function createLastroChatMapLinks(deps: {
   setHtml: (parent: HTMLElement, html: string) => void;
   showPrompt: (message: string, onYes: () => void, onNo: () => void) => ChatMapPrompt | undefined;
+  shouldConfirmTeleport?: () => boolean;
   teleport: (destination: ChatMapDestination) => void;
   canTeleport?: () => boolean;
   getMap?: () => string;

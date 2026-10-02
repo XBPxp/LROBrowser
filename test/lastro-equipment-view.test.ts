@@ -18,7 +18,8 @@ interface Actor {
   _transformationSeq: number; _active_monster_transform: number | null; _effectiveJob: number;
 }
 interface Pending { path: string; success?: () => void; failure?: () => void; done?: boolean; }
-function fixture(source = patched) {
+const iceWingSprite = (id = 3160, doram = false) => `robe/${id}/C_Ice_Wing/C_Ice_Wing${doram ? '_doram' : ''}.spr`;
+function fixture(source = patched, sharedRobe = true, robeNames: Record<number, string> = { 71: 'C_Ice_Wing', 3160: 'C_Ice_Wing' }) {
   const pending: Pending[] = [], timers: (() => void)[] = [];
   const loadFile = vi.fn((path: string, success?: () => void, failure?: () => void) => { pending.push({ path, success, failure }); });
   const db = {
@@ -26,7 +27,10 @@ function fixture(source = patched) {
     getBodyPath: (job: number, sex: number, style = 0) => `body/${job}/${sex}/${style}`,
     getAdminPath: (sex: number) => `admin/${sex}`,
     getRobePath: (id: number, job: number, sex: number) => id === 999 ? null : `robe/${id}/${job}/${sex}`,
-    getRobePathNoSex: (id: number) => `robe/${id}/shared`,
+    getRobePathNoSex: (id: number, job: number) => {
+      const name = robeNames[id];
+      return !sharedRobe ? null : name ? `robe/${id}/${name}/${name}${job === 4218 ? '_doram' : ''}` : `robe/${id}/shared`;
+    },
     getWeaponPath: (id: number, job: number, sex: number) => `weapon/${id}/${job}/${sex}`,
     getWeaponViewID: (id: number) => id + 100,
     getWeaponSound: (id: number) => 'sound/' + id,
@@ -106,15 +110,17 @@ describe('native equipment resource request lifecycle', () => {
 
   it('keeps the profession ACT when the robe uses a shared SPR', () => {
     const f = fixture(); f.actor.robe = 3165;
-    f.finish('robe/3165/4010/1.spr', false); f.finish('robe/3165/shared.spr');
+    f.finish('robe/3165/4010/1.spr', false);
+    f.finish('robe/3165/shared.spr');
     expect(f.actor.files.robe).toMatchObject({ spr: 'robe/3165/shared.spr', act: 'robe/3165/4010/1.act' });
   });
 
-  it('rejects an older shared robe fallback after a new robe has loaded', () => {
+  it('rejects an older common robe failure after a new robe has loaded', () => {
     const f = fixture(), a = f.actor;
-    a.robe = 1; f.finish('robe/1/4010/1.spr', false);
-    a.robe = 2; f.finish('robe/2/4010/1.spr'); f.finish('robe/1/shared.spr');
+    a.robe = 3160;
+    a.robe = 2; f.finish('robe/2/4010/1.spr'); f.finish(iceWingSprite(), false);
     expect(a.robe).toBe(2); expect(a.files.robe!.act).toBe('robe/2/4010/1.act');
+    expect(f.pending.some(item => item.path === 'robe/3160/4010/1.spr')).toBe(false);
   });
 
   it('protects the weapon type fallback with the same request sequence', () => {
@@ -149,6 +155,134 @@ describe('native equipment resource request lifecycle', () => {
     expect(a.files.robe!.spr).toBeNull();
     a.robe = 3165; a.robe = 999; f.finish('robe/3165/4010/0.spr');
     expect(a.robe).toBe(999); expect(a.files.robe!.spr).toBeNull();
+  });
+});
+
+describe('verified Ice Wing artwork with profession-specific ACTs', () => {
+  it.each([71, 3160, 9005])('selects canonical Ice Wing artwork by resource name for view %s', id => {
+    const f = fixture(patched, true, { [id]: 'C_Ice_Wing' }); f.actor.robe = id;
+    expect(f.pending.filter(item => item.path.endsWith('.spr')).map(item => item.path)).toEqual([iceWingSprite(id)]);
+    f.finish(iceWingSprite(id));
+    expect(f.actor.files.robe!.act).toBe(`robe/${id}/4010/1.act`);
+  });
+
+  it('recognizes the canonical Doram Ice Wing common artwork', () => {
+    const f = fixture(); f.actor._job = f.actor._effectiveJob = 4218; f.actor.robe = 3160;
+    expect(f.pending.filter(item => item.path.endsWith('.spr')).map(item => item.path)).toEqual([iceWingSprite(3160, true)]);
+    f.finish(iceWingSprite(3160, true));
+    expect(f.actor.files.robe).toMatchObject({ spr: iceWingSprite(3160, true), act: 'robe/3160/4218/1.act' });
+  });
+
+  it.each(['C_Ice_Wing_Extra', 'Other_Costume', 'C_Ice_Wing_doram'])('uses native order for a different resource at the known Ice Wing ID (%s)', resource => {
+    const f = fixture(patched, true, { 3160: resource }); f.actor.robe = 3160;
+    expect(f.pending.filter(item => item.path.endsWith('.spr')).map(item => item.path)).toEqual(['robe/3160/4010/1.spr']);
+  });
+
+  it('selects common artwork before a successful profession SPR can supply a placeholder', () => {
+    const baseline = fixture(native), fixed = fixture();
+    baseline.actor.robe = 3160; fixed.actor.robe = 3160;
+    expect(baseline.pending.find(item => item.path.endsWith('.spr'))!.path).toBe('robe/3160/4010/1.spr');
+    baseline.finish('robe/3160/4010/1.spr');
+    expect(baseline.actor.files.robe!.spr).toBe('robe/3160/4010/1.spr');
+    expect(baseline.pending.some(item => item.path === iceWingSprite())).toBe(false);
+    expect(fixed.pending.find(item => item.path.endsWith('.spr'))!.path).toBe(iceWingSprite());
+    expect(fixed.pending.some(item => item.path === 'robe/3160/4010/1.spr')).toBe(false);
+    fixed.finish(iceWingSprite());
+    expect(fixed.actor.files.robe).toMatchObject({ spr: iceWingSprite(), act: 'robe/3160/4010/1.act' });
+  });
+
+  it('falls back to the profession SPR only after the common SPR fails', () => {
+    const f = fixture(); f.actor.robe = 3160;
+    expect(f.pending.filter(item => item.path.endsWith('.spr')).map(item => item.path)).toEqual([iceWingSprite()]);
+    f.finish(iceWingSprite(), false);
+    expect(f.actor.files.robe).toMatchObject({ spr: null, act: null });
+    expect(f.pending.filter(item => item.path.endsWith('.spr')).map(item => item.path)).toEqual([iceWingSprite(), 'robe/3160/4010/1.spr']);
+    f.finish('robe/3160/4010/1.spr');
+    expect(f.actor.files.robe).toMatchObject({ spr: 'robe/3160/4010/1.spr', act: 'robe/3160/4010/1.act' });
+  });
+
+  it('stops after both robe sprite candidates fail without looping back to common', () => {
+    const f = fixture(); f.actor.robe = 3160;
+    f.finish(iceWingSprite(), false); f.finish('robe/3160/4010/1.spr', false);
+    expect(f.pending.filter(item => item.path.endsWith('.spr'))).toHaveLength(2);
+    expect(f.actor.files.robe).toMatchObject({ spr: null, act: null });
+    expect(f.actor.robe).toBe(3160);
+  });
+
+  it('keeps the legacy robe route when no common artwork path exists', () => {
+    const f = fixture(patched, false); f.actor.robe = 2;
+    expect(f.pending.filter(item => item.path.endsWith('.spr')).map(item => item.path)).toEqual(['robe/2/4010/1.spr']);
+    f.finish('robe/2/4010/1.spr');
+    expect(f.actor.files.robe).toMatchObject({ spr: 'robe/2/4010/1.spr', act: 'robe/2/4010/1.act' });
+  });
+
+  it.each<Part>(['weapon', 'shield', 'accessory', 'accessory2', 'accessory3'])('preserves the native %s sprite route', part => {
+    const baseline = fixture(native), fixed = fixture();
+    baseline.actor[part] = 2; fixed.actor[part] = 2;
+    expect(fixed.pending.map(item => item.path)).toEqual(baseline.pending.map(item => item.path));
+  });
+
+  it('rejects an older legacy robe success after newer common artwork has loaded', () => {
+    const f = fixture(); f.actor.robe = 3160; f.finish(iceWingSprite(), false);
+    f.actor.robe = 71; f.finish(iceWingSprite(71)); f.finish('robe/3160/4010/1.spr');
+    expect(f.actor.robe).toBe(71);
+    expect(f.actor.files.robe).toMatchObject({ spr: iceWingSprite(71), act: 'robe/71/4010/1.act' });
+  });
+
+  it('does not resurrect an unequipped robe from a pending legacy SPR', () => {
+    const f = fixture(); f.actor.robe = 3160; f.finish(iceWingSprite(), false);
+    f.actor.robe = 0; f.finish('robe/3160/4010/1.spr');
+    expect(f.actor.robe).toBe(0); expect(f.actor.files.robe).toMatchObject({ spr: null, act: null });
+  });
+
+  it.each([true, false])('rejects a common robe callback after a sex change (success=%s)', success => {
+    const f = fixture(); f.actor.robe = 3160; f.actor._sex = 0;
+    f.finish(iceWingSprite(), success);
+    expect(f.actor.files.robe).toMatchObject({ spr: null, act: null });
+    expect(f.pending.some(item => item.path === 'robe/3160/4010/1.spr')).toBe(false);
+  });
+
+  it('ignores a stale common failure while refreshing the robe for a new profession', () => {
+    const f = fixture(); f.actor.robe = 3160; f.functions.body.call(f.actor, 0);
+    f.finish(iceWingSprite(), false);
+    expect(f.pending.some(item => item.path === 'robe/3160/4010/1.spr')).toBe(false);
+    f.finish('body/0/1/0.spr'); f.finish(iceWingSprite());
+    expect(f.actor.files.robe).toMatchObject({ spr: iceWingSprite(), act: 'robe/3160/0/1.act' });
+  });
+});
+
+describe('native profession-first order for every other robe', () => {
+  it.each([1, 5, 6, 33, 3165])('preserves native profession SPR and ACT requests for robe %s on Madogear', id => {
+    const baseline = fixture(native), fixed = fixture();
+    for (const f of [baseline, fixed]) {
+      f.actor._job = f.actor._effectiveJob = 4086;
+      f.actor.robe = id;
+    }
+    expect(fixed.pending.map(item => item.path)).toEqual(baseline.pending.map(item => item.path));
+    expect(fixed.pending.some(item => item.path === `robe/${id}/shared.spr`)).toBe(false);
+    fixed.finish(`robe/${id}/4086/1.spr`);
+    expect(fixed.actor.files.robe).toMatchObject({ spr: `robe/${id}/4086/1.spr`, act: `robe/${id}/4086/1.act` });
+  });
+
+  it('uses the native shared SPR fallback only after a profession SPR failure', () => {
+    const f = fixture(); f.actor.robe = 5;
+    expect(f.pending.map(item => item.path)).toEqual(['robe/5/4010/1.act', 'robe/5/4010/1.spr']);
+    f.finish('robe/5/4010/1.spr', false);
+    expect(f.pending.map(item => item.path)).toEqual(['robe/5/4010/1.act', 'robe/5/4010/1.spr', 'robe/5/shared.spr']);
+    f.finish('robe/5/shared.spr');
+    expect(f.actor.files.robe).toMatchObject({ spr: 'robe/5/shared.spr', act: 'robe/5/4010/1.act' });
+    expect(f.pending.some(item => item.path === 'robe/5/shared.act')).toBe(false);
+  });
+
+  it.each(['unequip', 'replacement', 'sex', 'job'] as const)('rejects the ordinary shared fallback after %s', change => {
+    const f = fixture(); f.actor.robe = 5; f.finish('robe/5/4010/1.spr', false);
+    if (change === 'unequip') f.actor.robe = 0;
+    if (change === 'replacement') { f.actor.robe = 6; f.finish('robe/6/4010/1.spr'); }
+    if (change === 'sex') f.actor._sex = 0;
+    if (change === 'job') f.functions.body.call(f.actor, 0);
+    const before = { ...f.actor.files.robe }; f.finish('robe/5/shared.spr');
+    expect(f.actor.files.robe).toEqual(before);
+    expect(f.actor.robe).toBe(change === 'unequip' ? 0 : change === 'replacement' ? 6 : 5);
   });
 });
 

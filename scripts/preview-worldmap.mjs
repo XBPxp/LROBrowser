@@ -4,8 +4,11 @@ import { readFile, writeFile } from 'node:fs/promises';
 import { TextDecoder } from 'node:util';
 import console from 'node:console';
 import { extractWorldMapFixture } from './extract-worldmap-fixture.mjs';
+import { WORLD_MAP_CSS, WORLD_MAP_HTML, installLastroWorldMap } from './lastro-worldmap.mjs';
 
 const fixture = extractWorldMapFixture(await readFile('generated/runtime/Online.js', 'utf8'));
+fixture.css = WORLD_MAP_CSS; fixture.html = WORLD_MAP_HTML;
+fixture.installLastroWorldMap = installLastroWorldMap.toString();
 const items = {};
 const lua = new TextDecoder('gb18030').decode(await readFile('vendor/core/System/itemInfo_re_61.lua'));
 for (const match of lua.matchAll(/^\s*\[(\d+)\]\s*=\s*\{([\s\S]*?)(?=^\s*\[\d+\]\s*=|^\})/gm)) {
@@ -17,11 +20,13 @@ for (const match of lua.matchAll(/^\s*\[(\d+)\]\s*=\s*\{([\s\S]*?)(?=^\s*\[\d+\]
 let itemIcons = {}; try { itemIcons = JSON.parse(await readFile('generated/worldmap-item-icons/index.json', 'utf8')); } catch { /* optional imported preview assets */ }
 let windowAssets = {}; try { windowAssets = JSON.parse(await readFile('generated/worldmap-window-assets/index.json', 'utf8')); } catch { /* optional native skin/artwork samples */ }
 await writeFile('generated/worldmap-preview.js', `
+import { setLastROInnerHTML } from '/src/runtime/lastro-trusted-dom.mjs';
 const host=document.getElementById('map');
 const root=host.attachShadow({mode:'open'});
-root.innerHTML='<style>'+${JSON.stringify(fixture.css)}+'</style>'+${JSON.stringify(fixture.html)};
+setLastROInnerHTML(root,${JSON.stringify(fixture.html)});
+const style=document.createElement('style');style.textContent=${JSON.stringify(fixture.css)};root.prepend(style);
 const items=${JSON.stringify(items)};
-const component={_host:host,getRoot:()=>root,focus:()=>{}};
+const component={_host:host,getRoot:()=>root,focus:()=>{},append(){document.body.append(host);this.__active=true;this.onAppend()},remove(){this.__active=false;this.onRemove();host.remove()}};
 const itemIcons=${JSON.stringify(itemIcons)}, decodedIcons=new Map();
 const windowAssets=${JSON.stringify(windowAssets)};
 function decodeIcon(url){

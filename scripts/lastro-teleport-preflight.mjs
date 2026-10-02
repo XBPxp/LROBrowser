@@ -1,11 +1,22 @@
 /** Validate map resources without loading a scene or sending any game packets. */
-export function createLastroTeleportPreflight({ loadFile, getMap }) {
-  if (typeof loadFile !== 'function' || typeof getMap !== 'function') {
+export function createLastroTeleportPreflight({ loadFile, getMap, getProfile = () => '' }) {
+  if (typeof loadFile !== 'function' || typeof getMap !== 'function' || typeof getProfile !== 'function') {
     throw new TypeError('Teleport preflight requires loadFile and getMap functions');
   }
 
   let generation = 0;
   let active = null;
+  let cachedProfile;
+  const metadataCache = new Map();
+  const cacheLifetime = 5 * 60 * 1000;
+  const cacheLimit = 64;
+
+  function selectProfile(profile) {
+    if (cachedProfile !== profile) {
+      metadataCache.clear();
+      cachedProfile = profile;
+    }
+  }
 
   function failure(message, code, resource) {
     const error = new Error(message);
@@ -150,6 +161,8 @@ export function createLastroTeleportPreflight({ loadFile, getMap }) {
     cancel();
     const token = generation;
     const origin = currentMap();
+    const profile = String(getProfile());
+    selectProfile(profile);
     const points = routePoints(route);
     let resolveAbort;
     const aborted = new Promise((resolve) => { resolveAbort = resolve; });
@@ -159,6 +172,11 @@ export function createLastroTeleportPreflight({ loadFile, getMap }) {
     function ensureActive() {
       if (token !== generation || active !== request) throw cancelled();
       try {
+        const currentProfile = String(getProfile());
+        if (currentProfile !== profile) {
+          selectProfile(currentProfile);
+          throw cancelled();
+        }
         if (currentMap() !== origin) throw cancelled();
       } catch {
         throw cancelled();
@@ -189,33 +207,74 @@ export function createLastroTeleportPreflight({ loadFile, getMap }) {
       return resources.get(resource);
     }
 
-    try {
-      const maps = [];
-      const names = new Set(points.map((point) => point.mapname));
-      for (const name of names) {
-        // MapRenderer.setMap removes instance prefixes before loading the scene.
-        // Keep the full server ID in points and approval; only resource names use
-        // the same physical map name as the native scene loader.
-        const resourceMap = name.replace(/^(\d{3})(\d@)/, '$2').replace(/^\d{3}#/, '');
-        const rsw = `data/${resourceMap}.rsw`;
-        const { gnd, gat } = rswReferences(await read(rsw), rsw);
-        const [ground, altitude] = await Promise.all([read(gnd), read(gat)]);
-        const groundSize = dimensions(ground, 'GRGN', gnd);
-        const { width, height } = dimensions(altitude, 'GRAT', gat);
-        if (width !== groundSize.width * 2 || height !== groundSize.height * 2) {
-          throw failure(`地图地形与坐标资源的尺寸不一致：${rsw}`, 'INVALID_RESOURCE', gat);
+    const stagedMetadata = new Map();
+    async function validateMap(resourceMap) {
+      ensureActive();
+      const cached = metadataCache.get(resourceMap);
+      if (cached) {
+        if (cached.expires > Date.now()) {
+          metadataCache.delete(resourceMap);
+          metadataCache.set(resourceMap, cached);
+          return cached.metadata;
         }
+        metadataCache.delete(resourceMap);
+      }
+      const rsw = `data/${resourceMap}.rsw`;
+      const { gnd, gat } = rswReferences(await read(rsw), rsw);
+      const [ground, altitude] = await Promise.all([read(gnd), read(gat)]);
+      const groundSize = dimensions(ground, 'GRGN', gnd);
+      const { width, height } = dimensions(altitude, 'GRAT', gat);
+      if (width !== groundSize.width * 2 || height !== groundSize.height * 2) {
+        throw failure(`地图地形与坐标资源的尺寸不一致：${rsw}`, 'INVALID_RESOURCE', gat);
+      }
+      ensureActive();
+      const metadata = { width, height, rsw, gnd, gat };
+      // Commit only after the whole route succeeds; a failed or cancelled peer
+      // must not leave freshly validated metadata behind.
+      stagedMetadata.set(resourceMap, { metadata, expires: Date.now() + cacheLifetime });
+      return metadata;
+    }
+
+    try {
+      const names = [...new Set(points.map((point) => point.mapname))];
+      // Match MapRenderer's physical instance name while retaining the full
+      // server ID in the returned maps and each coordinate check.
+      const physicalName = (name) => name.replace(/^(\d{3})(\d@)/, '$2').replace(/^\d{3}#/, '');
+      const physicalMaps = [...new Set(names.map(physicalName))];
+      const validated = new Map();
+      let nextMap = 0;
+      async function worker() {
+        while (nextMap < physicalMaps.length) {
+          ensureActive();
+          const resourceMap = physicalMaps[nextMap++];
+          const metadata = await validateMap(resourceMap);
+          ensureActive();
+          validated.set(resourceMap, metadata);
+        }
+      }
+      await Promise.all(Array.from({ length: Math.min(2, physicalMaps.length) }, () => worker()));
+      const maps = names.map((name) => {
+        const metadata = validated.get(physicalName(name));
+        const { width, height, gat } = metadata;
         for (const point of points) {
           if (point.mapname === name && (point.x >= width || point.y >= height)) {
             throw failure(`地图 ${name} 的坐标超出范围，请重新选择。`, 'OUT_OF_BOUNDS', gat);
           }
         }
-        maps.push({ mapname: name, width, height, rsw, gnd, gat });
-      }
+        return { mapname: name, ...metadata };
+      });
       ensureActive();
+      for (const [resourceMap, cached] of stagedMetadata) {
+        metadataCache.delete(resourceMap);
+        metadataCache.set(resourceMap, cached);
+      }
+      while (metadataCache.size > cacheLimit) metadataCache.delete(metadataCache.keys().next().value);
       return { approved: true, token, maps };
     } finally {
-      if (active === request) active = null;
+      if (active === request) {
+        active = null;
+        request.abort();
+      }
     }
   }
 

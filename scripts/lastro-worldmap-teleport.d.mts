@@ -6,6 +6,7 @@ export interface WorldMapTeleportOptions {
   send(mapid: string): void;
   onSameMap?(mapid: string): void;
   onError?(error: unknown): void;
+  shouldConfirmTeleport?(): boolean;
   showPrompt?(message: string, onYes: () => void, onNo: () => void): {
     onRemove?: (...args: unknown[]) => unknown;
     remove?: () => void;

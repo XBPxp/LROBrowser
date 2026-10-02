@@ -20,6 +20,7 @@ export interface AchievementLinkComponent {
 export function installLastroAchievementLinks(component: AchievementLinkComponent, options: {
   mapLabel?(mapname: string): string;
   showPrompt(message: string, onYes: () => void, onNo: () => void): NpcMapPrompt | void;
+  shouldConfirmTeleport?(): boolean;
   teleport(mapname: string): Promise<boolean>;
   cancelPending(): void;
   showMonster(name: string): unknown;

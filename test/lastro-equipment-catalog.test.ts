@@ -51,14 +51,15 @@ function load(source: string): Catalog {
       MountTable, AllMountTable, JobConst_default, WeaponType_default, WeaponTypeExpansion, WeaponName, WeaponTrail, ShieldTable_default});
   `) as Catalog;
 }
-function applyAccessoryNames(source: string, catalog: Catalog, names: Record<string, unknown> | null | undefined) {
+function applyLuaNames(source: string, catalog: Catalog, names: Record<string, unknown> | null | undefined,
+  tableName: 'AccNameTable' | 'RobeNameTable') {
   const file = ts.createSourceFile('DB.js', region(source, 'src/DB/DBManager.js'), ts.ScriptTarget.Latest, true, ts.ScriptKind.JS);
   const callbacks: string[] = [];
   function visit(node: ts.Node) {
     if (ts.isMethodDeclaration(node) && node.name.getText(file) === 'lazyInit') {
       function findCallback(child: ts.Node) {
         if (ts.isCallExpression(child) && child.expression.getText(file) === 'loadLuaTable' &&
-            ts.isStringLiteral(child.arguments[1]!) && child.arguments[1].text === 'AccNameTable' && child.arguments[2]) {
+            ts.isStringLiteral(child.arguments[1]!) && child.arguments[1].text === tableName && child.arguments[2]) {
           callbacks.push(child.arguments[2].getText(file));
         }
         ts.forEachChild(child, findCallback);
@@ -68,9 +69,27 @@ function applyAccessoryNames(source: string, catalog: Catalog, names: Record<str
     ts.forEachChild(node, visit);
   }
   visit(file);
-  if (callbacks.length !== 1) throw new Error('Missing or duplicate native accessory Lua callback');
-  const apply = vm.runInNewContext('(' + callbacks[0] + ')', { HatTable_default: catalog.HatTable_default }) as (names: unknown) => void;
+  if (callbacks.length !== 1) throw new Error('Missing or duplicate native Lua callback: ' + tableName);
+  const apply = vm.runInNewContext('(' + callbacks[0] + ')', {
+    HatTable_default: catalog.HatTable_default, RobeTable_default: catalog.RobeTable_default,
+  }) as (names: unknown) => void;
   apply(names);
+}
+function applyAccessoryNames(source: string, catalog: Catalog, names: Record<string, unknown> | null | undefined) {
+  applyLuaNames(source, catalog, names, 'AccNameTable');
+}
+
+function bundledRobeNames(): Record<string, string> {
+  const base = 'vendor/core/data/luafiles514/lua files/datainfo/';
+  const ids = Object.fromEntries([...fs.readFileSync(base + 'spriterobeid.lub', 'latin1')
+    .matchAll(/(ROBE_\w+)\s*=\s*(\d+)/g)].map(match => [match[1]!, Number(match[2])]));
+  const table = fs.readFileSync(base + 'spriterobename.lub', 'latin1')
+    .match(/RobeNameTable\s*=\s*\{([\s\S]*?)\}/)?.[1];
+  if (!table) throw new Error('Unsupported bundled robe table');
+  const entries = [...table.matchAll(/\[SPRITE_ROBE_IDs\.(\w+)\]\s*=\s*"([^"]*)"/g)];
+  if (entries.length !== [...table.matchAll(/\[SPRITE_ROBE_IDs\./g)].length ||
+      entries.some(match => ids[match[1]!] === undefined)) throw new Error('Unresolved bundled robe entry');
+  return Object.fromEntries(entries.map(match => [ids[match[1]!]!, match[2]!]));
 }
 
 // These bundled Lua 5.1 chunks contain only top-level table assignments. Execute
@@ -123,6 +142,30 @@ const numericKeys = (table: object) => Object.keys(table).filter(key => /^\d+$/.
 const jobs = numericKeys(catalog.JobNameTable), weaponJobs = numericKeys(catalog.WeaponJobTable);
 
 describe('complete bundled equipment catalogs through native resource resolvers', () => {
+  it('loads every bundled Lua appearance through the real startup callbacks, including Ice Wing 3160', () => {
+    const fixed = load(patched), robes = bundledRobeNames();
+    expect(fixed.RobeTable_default[3160]).toBeUndefined();
+    applyLuaNames(patched, fixed, robes, 'RobeNameTable');
+    applyAccessoryNames(patched, fixed, bundledAccessoryNames());
+    expect(fixed.RobeTable_default[3160]).toBe('C_Ice_Wing');
+    expect(fixed.RobeTable_default[71]).toBe('C_Ice_Wing');
+    const failures: string[] = [];
+    for (const [id, resource] of Object.entries(fixed.HatTable_default)) {
+      if (+id <= 0) continue;
+      for (const sex of [0, 1]) if (!fixed.DB.getHatPath(+id, sex)?.endsWith(resource)) failures.push(`hat ${id}/${sex}`);
+    }
+    for (const [id, resource] of Object.entries(fixed.RobeTable_default)) {
+      if (+id <= 0 || resource === 'LAST') continue;
+      for (const job of jobs) for (const sex of [0, 1]) {
+        const path = fixed.DB.getRobePath(+id, job, sex);
+        if (!path?.includes('/' + resource + '/') || /undefined|null/.test(path)) failures.push(`robe ${id}/${job}/${sex}`);
+      }
+    }
+    expect(failures).toEqual([]);
+    expect(Object.keys(fixed.HatTable_default)).toHaveLength(4405);
+    expect(Object.keys(fixed.RobeTable_default)).toHaveLength(222);
+  });
+
   it('preserves all existing valid resource names and job IDs while repairing missing aliases', () => {
     const native = load(vendor);
     for (const name of ['HatTable_default', 'RobeTable_default', 'WeaponName', 'WeaponTrail', 'ShieldTable_default', 'WeaponType_default'] as const) {
@@ -253,6 +296,20 @@ describe('complete bundled equipment catalogs through native resource resolvers'
       expect(native.DB.getHatPath(3169, sex)).toBe(`data/sprite/¾Ç¼¼»ç¸®/${['¿©', '³²'][sex]}/${['¿©', '³²'][sex]}`);
       expect(fixed.DB.getHatPath(3169, sex)).toBe(`data/sprite/¾Ç¼¼»ç¸®/${['¿©', '³²'][sex]}/${['¿©', '³²'][sex]}_gucn088`);
     }
+  });
+
+  it('repairs only the verified missing Ape Mask alias in the real bundled Lua', () => {
+    const names = bundledAccessoryNames(), native = load(vendor), fixed = load(patched);
+    const canonical = native.HatTable_default[1462];
+    expect(canonical).toBe('_\xc0\xaf\xc0\xce\xbf\xf8\xb8\xb6\xbd\xba\xc5\xa9');
+    expect(names[1462]).toBe('_\xc0\xaf\xc0\xce\xbf\xf8\xb0\xa1\xb8\xe9');
+    applyAccessoryNames(vendor, native, names);
+    applyAccessoryNames(patched, fixed, names);
+    expect(native.HatTable_default[1462]).toBe(names[1462]);
+    expect(fixed.HatTable_default[1462]).toBe(canonical);
+    for (const sex of [0, 1]) expect(fixed.DB.getHatPath(1462, sex)?.endsWith(canonical!)).toBe(true);
+    applyAccessoryNames(patched, fixed, { 1462: '_new_server_ape_mask' });
+    expect(fixed.HatTable_default[1462]).toBe('_new_server_ape_mask');
   });
 
   it('still accepts named Lua overrides and additions through the native database callback', () => {

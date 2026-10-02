@@ -52,8 +52,10 @@ function fixture(source: string, fail: 'card-prepare' | 'tools-append' | null = 
   const session = { Entity: { life, effectState: 0, position: [0, 0], job: 1, aura: { free() {}, load() {} }, walk: {}, display: {}, set() {}, resetRoute() {} },
     AID: 1, GID: 2, Sex: 0, AuthCode: 3, pet: { friendly: 0 }, ping: {}, Playing: false };
   const connections: Array<(success: boolean) => void> = [];
+  const itemInfo = new Map<number, { identifiedResourceName: string }>();
+  const getItemInfo = vi.fn((id: number) => itemInfo.get(id));
   const context = vm.createContext({
-    window: { ROConfig: config }, document: {}, console, Object, Number, String, Date, Map,
+    window: { ROConfig: config }, document: {}, console, Object, Number, String, Date, Map, Array,
     __esmMin: (init: () => void) => init, __exportAll: (value: unknown) => value,
     PACKET: { ZC: packetNamespace, CZ: packetNamespace },
     SessionStorage_default: session, PacketVerManager_default: { value: 20211103 },
@@ -64,7 +66,7 @@ function fixture(source: string, fail: 'card-prepare' | 'tools-append' | null = 
       read() {}, setPing() {}, utils: { longToIP: () => 'fixture.invalid' },
     },
     MapRenderer: { currentMap: 'fixture.gat', onLoad: () => {}, setMap() {} },
-    DB: { getAllSignboardsForMap: () => null, getJobClass: () => 1 },
+    DB: { getAllSignboardsForMap: () => null, getJobClass: () => 1, getItemInfo },
     EntityManager: { add: () => timeline.push('entity') },
     StatusState_default: { EffectState: { FALCON: 1, WUG: 2 } },
     shouldUseDebugLegacyMapEnter: () => false, shouldUseLegacyMapEnter: () => true,
@@ -73,7 +75,12 @@ function fixture(source: string, fail: 'card-prepare' | 'tools-append' | null = 
     LastROInvalidateServerTick() {}, LastROResetServerTick() {},
   });
   const engine = region(source, 'src/Engine/MapEngine.js');
+  // Inventory hooks share these real declarations in the prepared Item module.
+  // Keep the isolated startup fixture's dependency graph equivalent to that module.
+  const robeRegistration = source.includes('function registerLastroCostumeRobeList(')
+    ? functions(source, 'src/Engine/MapEngine/Item.js', ['registerLastroCostumeRobeAppearance', 'registerLastroCostumeRobeList']) : '';
   const registers = [
+    robeRegistration,
     functions(source, 'src/Engine/MapEngine/Main.js', ['MainEngine$11', 'onParameterChange$1']),
     functions(source, 'src/Engine/MapEngine/Item.js', ['ItemEngine', 'onInventorySetList']),
     functions(source, 'src/Engine/MapEngine/Skill.js', ['SkillEngine', 'onShortCutList']),
@@ -112,9 +119,11 @@ function fixture(source: string, fail: 'card-prepare' | 'tools-append' | null = 
     ? functions(source, 'src/UI/Components/NpcStore/NpcStore.js', ['lastroCloseVendingShopping']) : '';
   vm.runInContext(region(source, 'src/Core/Configs.js') + '\ninit_Configs(); Configs.setServer(window.ROConfig.servers[0]);\n'
     + region(source, 'src/DB/Status/StatusProperty.js') + '\ninit_StatusProperty();\n'
+    + region(source, 'src/DB/Items/EquipmentLocation.js') + '\ninit_EquipmentLocation();\n'
+    + region(source, 'src/DB/Items/RobeTable.js') + '\ninit_RobeTable();\n'
     + shoppingLifecycle + '\n' + engine.replaceAll('import.meta.url', '"isolated-app://synthetic/runtime/Online.js"') + '\n' + registers
     + '\ninit_MapEngine();', context);
-  return { context, timeline, hooks, components, session, connections, lifecycleFailure,
+  return { context, timeline, hooks, components, session, connections, lifecycleFailure, itemInfo, getItemInfo,
     start: () => vm.runInContext('MapEngine.init(0, 5121, "fixture.gat");', context),
     mapLoaded: () => vm.runInContext('onMapChange({xPos:1,yPos:2,mapName:"fixture.gat"}); MapRenderer.onLoad();', context) };
 }
@@ -156,4 +165,27 @@ describe.each([['native', native], ['prepared', prepared]])('%s map initializati
     expect(f.timeline).toContain('entity'); expect(f.timeline).not.toContain('send:NOTIFY_ACTORINIT');
     expect(f.hooks.has('PAR_CHANGE')).toBe(true);
   });
+});
+
+it('registers worn costume visuals through real startup inventory hooks without changing ordinary inventory', () => {
+  const f = fixture(prepared); f.start();
+  const slots = f.context.EquipmentLocation_default;
+  const robes = f.context.RobeTable_default as Record<number, string>;
+  const ordinary = { index: 1, ITID: 501, count: 11 };
+  f.hooks.get('NORMAL_ITEMLIST')!({ itemInfo: [ordinary] });
+  expect(f.getItemInfo).not.toHaveBeenCalled();
+  expect(f.components.get('InventoryController')!.setItems).toHaveBeenLastCalledWith([ordinary]);
+  expect(ordinary).toEqual({ index: 1, ITID: 501, count: 11 });
+  for (const id of [45000, 45001, 45002]) f.itemInfo.set(id, { identifiedResourceName: '测试披肩时装' });
+  const worn = { index: 2, ITID: 45000, WearState: slots.COSTUME_ROBE, wItemSpriteNumber: 9001 };
+  const items = [worn,
+    { index: 3, ITID: 45001, WearState: slots.GARMENT, wItemSpriteNumber: 9002 },
+    { index: 4, ITID: 45002, WearState: 0, wItemSpriteNumber: 9003 }];
+  expect(robes[9001]).toBeUndefined();
+  f.hooks.get('EQUIPMENT_ITEMLIST')!({ itemInfo: items });
+  expect(robes[9001]).toBe('测试披肩时装');
+  expect(robes[9002]).toBeUndefined(); expect(robes[9003]).toBeUndefined();
+  expect(f.getItemInfo).toHaveBeenCalledExactlyOnceWith(45000);
+  expect(f.components.get('InventoryController')!.setItems).toHaveBeenLastCalledWith(items);
+  expect((f.components.get('InventoryController')!.setItems as ReturnType<typeof vi.fn>).mock.lastCall?.[0]).toBe(items);
 });

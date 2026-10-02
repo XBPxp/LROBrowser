@@ -32,6 +32,7 @@ export function installLastroNpcMapLinks(component: NpcMapComponent, options: {
   setHtml(parent: Element, html: string): void;
   labelFor?(mapid: string): string;
   showPrompt(message: string, onYes: () => void, onNo: () => void): NpcMapPrompt | void;
+  shouldConfirmTeleport?(): boolean;
   teleport(mapid: string): Promise<boolean>;
   cancelPending(): void;
   canActivate?(): boolean;

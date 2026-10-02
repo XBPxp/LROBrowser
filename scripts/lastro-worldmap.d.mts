@@ -52,6 +52,7 @@ export interface WorldMapComponent {
   getRoot(): ShadowRoot | HTMLElement | null;
   prepare(): unknown;
   append(target?: HTMLElement | string): unknown;
+  remove(): unknown;
   focus?(): unknown;
   searchMonster?(target: WorldMapMonsterTarget): Promise<void>;
 }

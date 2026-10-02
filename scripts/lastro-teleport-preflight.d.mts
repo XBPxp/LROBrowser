@@ -18,6 +18,8 @@ export function createLastroTeleportPreflight(deps: {
   /** Raw ArrayBuffer bytes; the native Client.loadFile decoder is not suitable. */
   loadFile: (name: string) => Promise<ArrayBuffer>;
   getMap: () => unknown;
+  /** Server/client identity; changes invalidate metadata and pending checks. */
+  getProfile?: () => unknown;
 }): {
   /** A new check cancels the previous check. Failures reject; cancellation is AbortError. */
   check: (route: unknown) => Promise<TeleportPreflightApproval>;

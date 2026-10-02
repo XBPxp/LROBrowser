@@ -2,7 +2,7 @@ import ts from 'typescript';
 import { createLastroTeleportPreflight } from './lastro-teleport-preflight.mjs';
 import { createLastroWorldMapTeleport } from './lastro-worldmap-teleport.mjs';
 
-export function installLastroAchievementLinks(component, { mapLabel, showPrompt, teleport, cancelPending, showMonster, onError }) {
+export function installLastroAchievementLinks(component, { mapLabel, showPrompt, shouldConfirmTeleport = () => true, teleport, cancelPending, showMonster, onError }) {
   const links = new WeakMap();
   let generation = 0, pending = null;
   function report(error) { try { onError?.(error); } catch { /* Keep native achievement controls usable. */ } }
@@ -80,7 +80,8 @@ export function installLastroAchievementLinks(component, { mapLabel, showPrompt,
         await showMonster(entry.target);
         return true;
       }
-      if (!await confirm(task, entry) || !valid(task)) return false;
+      if (shouldConfirmTeleport() !== false && !await confirm(task, entry)) return false;
+      if (!valid(task)) return false;
       task.approved = true;
       return await teleport(entry.target) === true;
     } catch (error) { if (valid(task)) report(error); return false; }
@@ -160,6 +161,7 @@ export function patchRuntimeAchievementLinks(source, resourceLoaderCode) {
   replace('Achievement_default = UIManager.addComponent(Achievement);', `
   const lastroAchievementMapPreflight = (${createLastroTeleportPreflight.toString()})({
     getMap: () => MapRenderer.loading ? "" : normalizeLastROTeleportMap(MapRenderer.currentMap),
+    getProfile: () => String(Configs.get("lastroNid", 0)) + ":" + String(Configs.get("clientVer", 0)),
     loadFile: ${resourceLoaderCode},
   });
   const lastroAchievementMapTeleport = (${createLastroWorldMapTeleport.toString()})({
@@ -181,6 +183,7 @@ export function patchRuntimeAchievementLinks(source, resourceLoaderCode) {
   });
   (${installLastroAchievementLinks.toString()})(Achievement, {
     mapLabel: mapname => DB.getMapName(mapname + ".gat", mapname),
+    shouldConfirmTeleport: () => typeof getLastroTeleportConfirmationEnabled !== "function" || getLastroTeleportConfirmationEnabled(),
     showMonster: name => WorldMap_default.searchMonster({ name }),
     teleport: mapname => lastroAchievementMapTeleport.request(mapname),
     cancelPending: () => lastroAchievementMapTeleport.cancelPending(),

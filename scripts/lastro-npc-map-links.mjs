@@ -1,7 +1,7 @@
 import { createLastroTeleportPreflight } from './lastro-teleport-preflight.mjs';
 import { createLastroWorldMapTeleport } from './lastro-worldmap-teleport.mjs';
 
-export function installLastroNpcMapLinks(component, { setHtml, labelFor, showPrompt, teleport, cancelPending, canActivate = () => true, onError }) {
+export function installLastroNpcMapLinks(component, { setHtml, labelFor, showPrompt, shouldConfirmTeleport = () => true, teleport, cancelPending, canActivate = () => true, onError }) {
   let generation = 0, pending = null;
   const links = new WeakMap();
 
@@ -70,7 +70,7 @@ export function installLastroNpcMapLinks(component, { setHtml, labelFor, showPro
     pending = task;
     link.setAttribute('aria-busy', 'true');
     try {
-      if (!await confirm(task, entry)) return false;
+      if (shouldConfirmTeleport() !== false && !await confirm(task, entry)) return false;
       if (pending !== task || !current(link, entry)) return false;
       task.approved = true;
       const approved = await teleport(entry.mapname);
@@ -222,6 +222,7 @@ export function patchRuntimeNpcMapLinks(source, resourceLoaderCode) {
   replace('NpcBox_default = UIManager.addComponent(NpcBox);', `
   const lastroNpcMapPreflight = (${createLastroTeleportPreflight.toString()})({
     getMap: () => MapRenderer.loading ? "" : normalizeLastROTeleportMap(MapRenderer.currentMap),
+    getProfile: () => String(Configs.get("lastroNid", 0)) + ":" + String(Configs.get("clientVer", 0)),
     loadFile: ${resourceLoaderCode},
   });
   const lastroNpcMapTeleport = (${createLastroWorldMapTeleport.toString()})({
@@ -251,6 +252,7 @@ export function patchRuntimeNpcMapLinks(source, resourceLoaderCode) {
   (${installLastroNpcMapLinks.toString()})(NpcBox, {
     setHtml: (parent, html) => setLastROInnerHTML(parent, html),
     labelFor: mapname => DB.getMapName(mapname + ".gat", mapname),
+    shouldConfirmTeleport: () => typeof getLastroTeleportConfirmationEnabled !== "function" || getLastroTeleportConfirmationEnabled(),
     showPrompt: (message, yes, no) => {
       const intersect = Mouse.intersect, freeze = SessionStorage_default.FreezeUI;
       const input = InputBox_default;

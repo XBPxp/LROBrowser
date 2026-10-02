@@ -60,12 +60,12 @@ export function createWorldMapIndex(worldData, mobData, itemTable, getItemInfo) 
   return { maps, monsters, items, floors, search, normalize };
 }
 
-export const WORLD_MAP_HTML = '<div id="WorldMap"><div class="wm-canvas" aria-label="世界地图"><div class="wm-grid"></div></div><nav class="wm-toolbar" aria-label="世界地图工具"><select aria-label="大陆" class="wm-region"></select><div><button type="button" class="wm-search">搜索</button><button type="button" class="wm-close">关闭</button></div></nav><div class="wm-message" role="status" hidden></div><section class="wm-panel" role="dialog" aria-label="地图资料查询" hidden><header><button type="button" class="wm-back">返回</button><h2 class="wm-title"></h2></header><div class="wm-body"></div></section></div>';
+export const WORLD_MAP_HTML = '<div id="WorldMap"><div class="wm-canvas" aria-label="世界地图"><div class="wm-grid"></div></div><nav class="wm-toolbar" aria-label="世界地图工具"><select aria-label="大陆" class="wm-region"></select><div><button type="button" class="wm-search">搜索</button></div></nav><button type="button" class="wm-close" aria-label="关闭世界地图" title="关闭世界地图">关闭</button><div class="wm-message" role="status" hidden></div><section class="wm-panel" role="dialog" aria-label="地图资料查询" hidden><header><button type="button" class="wm-back">返回</button><h2 class="wm-title"></h2></header><div class="wm-body"></div></section></div>';
 
 export const WORLD_MAP_CSS = `
 :host{position:fixed!important;inset:0;width:100vw;height:100vh;display:block;overflow:hidden}
 .ui-component-root{position:absolute;inset:0;min-width:0;min-height:0;overflow:hidden}
-#WorldMap{position:absolute;inset:0;overflow:hidden;background:#1b2423;color:#f1f0e9;font:13px/1.5 Arial,'Microsoft YaHei','MiSans','LastRO Glyph Fallback',sans-serif;font-size-adjust:none;isolation:isolate}
+#WorldMap{--wm-gutter:clamp(12px,2.4vw,32px);position:absolute;inset:0;overflow:hidden;background:#1b2423;color:#f1f0e9;font:13px/1.5 Arial,'Microsoft YaHei','MiSans','LastRO Glyph Fallback',sans-serif;font-size-adjust:none;isolation:isolate}
 #WorldMap *{box-sizing:border-box}#WorldMap [hidden]{display:none!important}
 #WorldMap button,#WorldMap select,#WorldMap input{font:inherit;color:inherit}
 #WorldMap button{cursor:pointer}#WorldMap button:focus-visible,#WorldMap select:focus-visible,#WorldMap input:focus-visible{outline:2px solid #e1cf8f;outline-offset:2px}
@@ -75,16 +75,20 @@ export const WORLD_MAP_CSS = `
 .wm-tile img{display:block;width:100%;height:100%;object-fit:fill}.wm-tile:hover{outline:2px solid #ddcb90;z-index:1}.wm-tile.selected{outline:2px dashed #f6de92;z-index:2}.wm-tile.current{box-shadow:0 0 0 2px #e9ca6d;z-index:1}
 .wm-tile .wm-boss{position:absolute;left:4px;top:4px;width:14px;height:14px;object-fit:contain;filter:drop-shadow(0 1px 1px #000)}
 .wm-tile.party:not(.current){box-shadow:inset 0 0 0 2px #8bb85f}.wm-tile.party:not(.current)::after{content:'';position:absolute;right:3px;bottom:3px;width:7px;height:7px;border-radius:50%;background:#9fdb73}
-.wm-toolbar{position:absolute;left:15px;right:15px;top:15px;display:flex;justify-content:space-between;gap:12px;pointer-events:none;z-index:3}.wm-toolbar>div{display:flex;gap:12px}
-.wm-toolbar button,.wm-toolbar select{pointer-events:auto;border:0;border-radius:3px;background:rgba(0,0,0,.62);font-size:14px!important;font-weight:bold!important;min-height:36px;padding:6px 16px}.wm-toolbar option{background:#202723}.wm-toolbar button:hover{background:rgba(0,0,0,.85)}
+.wm-toolbar{position:absolute;left:var(--wm-gutter);right:var(--wm-gutter);top:12px;display:flex;justify-content:space-between;gap:8px;pointer-events:none;z-index:3}.wm-toolbar>div{display:flex;gap:8px;padding-right:68px}
+.wm-toolbar button,.wm-toolbar select{pointer-events:auto;border:1px solid #ffffff26;border-radius:4px;background:#202b27;font-size:12px!important;font-weight:500!important;height:32px;min-height:32px;padding:0 10px}.wm-toolbar button{width:60px}.wm-toolbar select{min-width:0;max-width:calc(100% - 136px)}.wm-toolbar option{background:#202723}.wm-toolbar button:hover{background:#303e37}
+#WorldMap .wm-close{position:absolute;top:12px;right:var(--wm-gutter);z-index:11}
+#WorldMap .wm-close,#WorldMap .wm-panel .wm-back{width:60px;height:32px;min-height:32px;padding:0;border:1px solid #ffffff26;border-radius:4px;background:#202b27;font-size:12px!important;font-weight:500!important;line-height:30px;text-align:center}#WorldMap .wm-close:hover,#WorldMap .wm-panel .wm-back:hover{background:#303e37;border-color:#a99561}
 .wm-message{position:absolute;left:50%;top:66px;transform:translateX(-50%);padding:12px 18px;background:#172021ed;border:1px solid #93866a;z-index:4;max-width:90%}
 .wm-message button{margin-left:12px;background:#384449;border:1px solid #9a9682;border-radius:3px}
-.wm-panel{position:absolute;inset:0;z-index:5;overflow:auto;background:rgba(8,12,12,.94);padding:18px clamp(12px,3vw,48px);overscroll-behavior:contain}
-.wm-panel header{display:flex;align-items:center;gap:16px;position:sticky;top:-18px;background:#111919f5;padding:14px 0;z-index:1;border-bottom:1px solid #ffffff26}.wm-panel header>button{flex:none}.wm-panel h2{flex:1;min-width:0;font-size:20px;margin:0;overflow-wrap:anywhere}.wm-panel h3{font-size:15px;margin:22px 0 10px}.wm-panel p{margin:10px 0}.wm-panel button{border:1px solid #ffffff30;border-radius:3px;color:#f2f0e6;background:#ffffff14;padding:7px 12px}.wm-panel button:hover{background:#ffffff25;border-color:#d4c390}
-.wm-cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:8px}.wm-card{display:flex;align-items:center;gap:10px;text-align:left;min-height:54px;overflow-wrap:anywhere}.wm-card span{flex:1}.wm-card small{display:block;color:#b9c2c1;font-size:11px;line-height:1.6}.wm-card img{width:26px;height:26px;object-fit:contain;flex:none}.wm-card img.wm-map-thumb{width:48px;height:48px;border-radius:3px}.wm-muted{color:#b4bfbc}.wm-form{display:flex;flex-wrap:wrap;gap:8px;margin:18px 0}.wm-form input{flex:1;min-width:120px}.wm-form input,.wm-form select{border:1px solid #ffffff35;border-radius:4px;background:#263231;padding:9px}.wm-description{white-space:pre-wrap;overflow-wrap:anywhere;background:#ffffff08;padding:16px;border-left:2px solid #a99561;line-height:1.8}.wm-description .wm-item-icon{width:48px;height:48px;object-fit:contain;float:right;margin:0 0 12px 16px}.wm-actions{display:flex;gap:8px;flex-wrap:wrap;margin:16px 0}.wm-page{display:flex;gap:12px;justify-content:center;align-items:center;margin:22px 0}.wm-selected{border-color:#d4c390!important}
+.wm-panel{position:absolute;inset:0;z-index:5;overflow:auto;background:rgba(8,12,12,.94);padding:0 var(--wm-gutter) 14px;font-size:12px;overscroll-behavior:contain}
+.wm-panel header{display:flex;align-items:center;gap:10px;position:sticky;top:0;margin:0 calc(-1 * var(--wm-gutter));background:#111919f5;padding:12px calc(var(--wm-gutter) + 70px) 12px var(--wm-gutter);z-index:1;border-bottom:1px solid #a9956138}.wm-panel header>button{flex:none}.wm-panel h2{flex:1;min-width:0;font-size:15px;font-weight:600;line-height:1.35;margin:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.wm-panel h3{font-size:14px;margin:18px 0 10px}.wm-panel p{margin:10px 0}.wm-panel button{border:1px solid #ffffff26;border-radius:4px;color:#f2f0e6;background:#ffffff0d;padding:6px 10px;min-height:32px}.wm-panel button:hover{background:#ffffff1a;border-color:#a99561}
+.wm-cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:8px}.wm-card{display:flex;align-items:center;gap:10px;text-align:left;min-height:48px;overflow-wrap:anywhere}.wm-card span{flex:1}.wm-card small{display:block;color:#a4b1ac;font-size:10px;line-height:1.6}.wm-card img{width:26px;height:26px;object-fit:contain;flex:none}.wm-card img.wm-map-thumb{width:48px;height:48px;border-radius:3px}.wm-muted{color:#aebbb5}.wm-form{display:grid;grid-template-columns:90px minmax(120px,1fr) 64px;align-items:center;gap:8px;margin:12px 0 18px;padding:12px;border:1px solid #ffffff14;border-radius:6px;background:#17201fee;box-shadow:inset 0 1px 0 #ffffff05}.wm-form input,.wm-form select{width:100%;min-width:0;min-height:36px;border:1px solid #ffffff29;border-radius:4px;background:#23302e;padding:7px 10px;line-height:20px}.wm-form input::placeholder{color:#8c9995}.wm-form>button{min-height:36px;border-color:#b8a67070;background:#56634b40}.wm-form>button:hover{background:#56634b70}.wm-description{white-space:pre-wrap;overflow-wrap:anywhere;background:#ffffff08;padding:16px;border-left:2px solid #a99561;line-height:1.8}.wm-description .wm-item-icon{width:48px;height:48px;object-fit:contain;float:right;margin:0 0 12px 16px}.wm-actions{display:flex;gap:8px;flex-wrap:wrap;margin:16px 0}.wm-page{display:flex;gap:12px;justify-content:center;align-items:center;margin:18px 0}.wm-selected{border-color:#d4c390!important}
 .wm-card .wm-item-thumbnail,.wm-item-thumbnail{display:inline-grid;place-items:center;width:40px;height:40px;flex:none;border-radius:4px;background:#ffffff0a;vertical-align:middle}.wm-item-thumbnail img.wm-item-icon{width:32px;height:32px;object-fit:contain;image-rendering:pixelated;margin:0;float:none}.wm-item-thumbnail .wm-icon-fallback{font-size:10px;line-height:1.3;color:#a3afab;text-align:center}.wm-description>.wm-item-thumbnail{float:right;width:64px;height:64px;margin:0 0 12px 16px}.wm-description>.wm-item-thumbnail img{width:48px;height:48px}
-.wm-workspace{display:grid;grid-template-columns:minmax(0,1fr);gap:20px;padding-top:16px}.wm-context,.wm-inspectors{min-width:0;max-height:none;overflow:visible;padding:0 0 12px}.wm-inspectors{border-top:1px solid #ffffff26;padding-top:16px}.wm-inspectors:empty{display:none}.wm-inspector{scroll-margin-top:100px}.wm-inspector+.wm-inspector{border-top:1px solid #ffffff30;margin-top:24px;padding-top:12px}.wm-inspector h3.wm-detail-title{margin-top:0;font-size:18px}.wm-map-image{margin:0;background:#050a09;border:1px solid #ffffff20;border-radius:4px;text-align:center;padding:12px}.wm-map-image img.wm-map-thumb{display:block;width:100%;height:clamp(180px,35vh,380px);object-fit:contain;image-rendering:pixelated}.wm-map-image figcaption{color:#b4bfbc;margin-top:8px}.wm-portrait{width:64px;height:64px;flex:none;display:grid;place-items:center;background:radial-gradient(ellipse,#ffffff12,transparent);border-radius:4px}.wm-portrait img{width:64px;height:64px;object-fit:contain;image-rendering:pixelated}.wm-portrait small{font-size:10px;text-align:center;color:#a3afab}.wm-monster-heading{display:flex;align-items:center;gap:12px}.wm-monster-heading .wm-portrait,.wm-monster-heading .wm-portrait img{width:88px;height:88px}.wm-card[aria-pressed=true]{border-color:#d4c390;background:#d4c39019}.wm-workspace .wm-cards{grid-template-columns:repeat(auto-fill,minmax(170px,1fr))}
-@media(max-width:760px){.wm-toolbar{left:8px;right:8px;top:10px}.wm-toolbar button,.wm-toolbar select{padding:6px 10px}.wm-toolbar>div{gap:6px}.wm-panel{padding:10px}.wm-panel header{top:-10px;gap:8px}.wm-panel h2{font-size:16px}.wm-workspace .wm-cards{grid-template-columns:repeat(auto-fill,minmax(145px,1fr))}.wm-card{padding:6px!important}.wm-card small{font-size:11px}}
+.wm-workspace{display:grid;grid-template-columns:minmax(0,1fr);gap:16px;padding-top:12px}.wm-context,.wm-inspectors{min-width:0;max-height:none;overflow:visible;padding:0 0 12px}.wm-inspectors{border-top:1px solid #ffffff26;padding-top:14px}.wm-inspectors:empty{display:none}.wm-inspector{scroll-margin-top:88px}.wm-inspector+.wm-inspector{border-top:1px solid #ffffff30;margin-top:20px;padding-top:12px}.wm-inspector h3.wm-detail-title{margin-top:0;font-size:15px}.wm-map-image{margin:0;background:#050a09;border:1px solid #ffffff20;border-radius:4px;text-align:center;padding:12px}.wm-map-image img.wm-map-thumb{display:block;width:100%;height:clamp(180px,35vh,380px);object-fit:contain;image-rendering:pixelated}.wm-map-image figcaption{color:#b4bfbc;margin-top:8px}.wm-portrait{width:64px;height:64px;flex:none;display:grid;place-items:center;background:radial-gradient(ellipse,#ffffff12,transparent);border-radius:4px}.wm-portrait img{width:64px;height:64px;object-fit:contain;image-rendering:pixelated}.wm-portrait small{font-size:10px;text-align:center;color:#a3afab}.wm-monster-heading{display:flex;align-items:center;gap:12px}.wm-monster-heading .wm-portrait,.wm-monster-heading .wm-portrait img{width:88px;height:88px}.wm-card[aria-pressed=true]{border-color:#d4c390;background:#d4c39019}.wm-workspace .wm-cards{grid-template-columns:repeat(auto-fill,minmax(170px,1fr))}
+@media(max-width:760px){#WorldMap{--wm-gutter:10px}.wm-toolbar,#WorldMap .wm-close{top:10px}.wm-panel header{gap:8px;padding-top:10px;padding-bottom:10px}.wm-panel h2{font-size:14px}.wm-form{grid-template-columns:72px minmax(0,1fr) 56px;gap:6px;padding:8px}.wm-form input,.wm-form select{padding:7px 8px}.wm-workspace .wm-cards{grid-template-columns:repeat(auto-fill,minmax(145px,1fr))}.wm-card{padding:6px!important}}
+@media(max-width:420px){.wm-panel h2{display:none}.wm-form{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}.wm-form input{grid-column:1/-1;grid-row:1}.wm-form>button{justify-self:stretch;width:100%;min-width:0}}
+#WorldMap .wm-search-results .wm-card{min-height:44px;padding:6px 8px;font-size:12px;line-height:1.4}#WorldMap .wm-search-results .wm-cards{grid-template-columns:repeat(auto-fill,minmax(min(100%,160px),1fr))}.wm-card small{font-size:11px}.wm-search-results .wm-card small{font-size:10px}.wm-search-results .wm-portrait,.wm-search-results .wm-portrait img{width:32px;height:32px}.wm-search-results .wm-card img.wm-map-thumb{width:36px;height:36px}.wm-search-results .wm-item-thumbnail{width:32px;height:32px}.wm-search-results .wm-item-thumbnail img.wm-item-icon{width:26px;height:26px}
 .wm-item-window{position:absolute;z-index:10;width:280px;max-width:calc(100% - 12px);max-height:calc(100% - 12px);display:flex;flex-direction:column;color:#000;background-color:#fff;background-repeat:no-repeat;border:0;border-radius:5px;box-shadow:inset 0 0 0 3px #fff,inset 0 0 0 4px #c0c0c0,0 2px 5px #0005;font-size:12px;line-height:18px;overflow:hidden;padding:3px}
 .wm-item-window-header{position:relative;z-index:1;display:flex;align-items:center;flex:none;height:27px;padding:0 16px 0 86px;cursor:grab;touch-action:none;user-select:none;background:linear-gradient(#fff 4px,#e5eaf2 5px,#f7f9fc 6px,#d5deeb 7px,#f8faff 8px,#e2e7f0 9px,#fff 20px);border-radius:3px 3px 0 0}.wm-item-window[data-skinned] .wm-item-window-header{background:transparent}.wm-item-window[data-dragging] .wm-item-window-header{cursor:grabbing}
 .wm-item-window-title{font-size:11px;font-weight:bold;min-width:0;margin:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-shadow:1px 1px #fff}
@@ -107,6 +111,8 @@ export function installLastroWorldMap(component, deps, regions, makeIndex) {
   let root, grid, canvas, panel, body, title, regionSelect, message;
   let index, loading, alive = false, generation = 0, currentRegion = 0;
   let route = null, fromSearch = false, selectedMap = '', searchTerm = '', searchType = 'all', searchPage = 0;
+  let resumeView = null;
+  let activeMonsterTarget = null;
   let searchMonsterId = null;
   let context, inspectors, monsterPane, itemPopup, itemOpener;
   let itemPosition = null, itemDrag = null, itemResizeObserver;
@@ -304,16 +310,34 @@ export function installLastroWorldMap(component, deps, regions, makeIndex) {
     if (restoreFocus) (itemOpener?.isConnected ? itemOpener : root.querySelector('.wm-back')).focus({ preventScroll: true });
     itemOpener = null;
   }
-  function closePanel() { deps.cancelTeleport?.(); generation++; closeItem(false); panel.hidden = true; route = null; fromSearch = false; body.replaceChildren(); root.querySelector('.wm-search').focus(); }
-  function hide() { closePanel(); component._host.style.display = 'none'; }
-  async function open(next, opener, monsterTarget) {
+  function rememberView() {
+    if (route && !panel.hidden) resumeView = { route: { ...route }, fromSearch,
+      monsterTarget: monsterPane?.isConnected ? { id: Number(monsterPane.dataset.id) }
+        : activeMonsterTarget ? { ...activeMonsterTarget } : null, scrollTop: panel.scrollTop };
+  }
+  function closePanel() { deps.cancelTeleport?.(); generation++; closeItem(false); panel.hidden = true; route = null; fromSearch = false; resumeView = null; activeMonsterTarget = null; body.replaceChildren(); root.querySelector('.wm-search').focus(); }
+  function hide(preserveView = false) {
+    if (preserveView) rememberView();
+    const saved = preserveView ? resumeView : null;
+    closePanel(); resumeView = saved; component._host.style.display = 'none';
+  }
+  function closeWorldMap() {
+    // Explicit close starts on the map next time; native remove owns cancellation,
+    // popup disposal and keyboard cleanup, without focusing the covered toolbar.
+    resumeView = null; activeMonsterTarget = null; route = null; fromSearch = false; panel.hidden = true;
+    component._host.style.display = 'none'; component.remove();
+  }
+  async function open(next, opener, monsterTarget, restoredView) {
     if (!visible()) showWindow();
+    resumeView = null;
     deps.cancelTeleport?.();
     const inline = next.kind === 'monster' || next.kind === 'item';
+    if (next.kind !== 'item') activeMonsterTarget = next.kind === 'monster' ? { id: Number(next.id) } : monsterTarget || null;
     if (next.kind !== 'item') closeItem(false);
     if (next.kind === 'search') fromSearch = false;
     else if (next.kind === 'map' && route?.kind === 'search') fromSearch = true;
     if (!inline || !route) route = inline ? { kind: 'search' } : next;
+    if (restoredView) fromSearch = restoredView.fromSearch;
     panel.hidden = false; message.hidden = true;
     if (!inline || !body.children.length) { title.textContent = '正在读取资料…'; body.replaceChildren(); }
     const back = root.querySelector('.wm-back'); back.hidden = false; back.textContent = '返回';
@@ -323,18 +347,19 @@ export function installLastroWorldMap(component, deps, regions, makeIndex) {
       if (!alive || ticket !== generation) return;
       if (!inline || !body.querySelector('.wm-workspace')) { render(); panel.scrollTop = 0; }
       if (inline) inspect(next, opener);
-      else if (next.kind === 'search') {
+      else {
         const match = monsterTarget?.id !== null && monsterTarget?.id !== undefined
           ? index.monsters.get(monsterTarget.id)
           : monsterTarget?.name ? index.search(monsterTarget.name, 'monster').filter(hit => hit.rank === 0 && String(hit.record.name).replace(/\^[0-9a-f]{6}/gi, '').trim().toLowerCase() === monsterTarget.name.toLowerCase()) : [];
         const monster = Array.isArray(match) ? match.length === 1 ? match[0].record : null : match;
         if (monster) inspect({ kind: 'monster', id: monster.id }, context.querySelector(`.wm-card[data-kind="monster"][data-id="${monster.id}"]`));
-        else context.querySelector('input')?.focus();
+        else if (next.kind === 'search') context.querySelector('input')?.focus();
+        else back.focus({ preventScroll: true });
       }
-      else back.focus({ preventScroll: true });
+      if (restoredView) panel.scrollTop = restoredView.scrollTop;
     } catch {
       if (!alive || ticket !== generation) return;
-      title.textContent = '资料加载失败'; body.replaceChildren(node('p', '未能读取本地地图资料，请重试。'), button('重试', () => open(next, opener, monsterTarget)));
+      title.textContent = '资料加载失败'; body.replaceChildren(node('p', '未能读取本地地图资料，请重试。'), button('重试', () => open(next, opener, monsterTarget, restoredView)));
     }
   }
   async function searchMonster(target) {
@@ -362,7 +387,7 @@ export function installLastroWorldMap(component, deps, regions, makeIndex) {
         try {
           const result = await deps.teleport(map.id, map.name);
           // Older synchronous adapters return void after sending successfully.
-          if (result !== false && alive && ticket === generation) hide();
+          if (result !== false && alive && ticket === generation) hide(true);
         } catch { /* The adapter reports failures; keep the selected map for retry. */ }
         finally { teleport.disabled = false; }
       });
@@ -451,9 +476,9 @@ export function installLastroWorldMap(component, deps, regions, makeIndex) {
         pager.append(prev, node('span', `${searchPage + 1} / ${Math.ceil(hits.length / 60)}`), next); results.append(pager);
       }
     };
-    form.addEventListener('submit', event => { event.preventDefault(); searchPage = 0; searchMonsterId = null; run(); });
-    input.addEventListener('input', () => { searchPage = 0; searchMonsterId = null; run(); });
-    type.addEventListener('change', () => { searchPage = 0; searchMonsterId = null; run(); });
+    form.addEventListener('submit', event => { event.preventDefault(); searchPage = 0; searchMonsterId = null; activeMonsterTarget = null; run(); });
+    input.addEventListener('input', () => { searchPage = 0; searchMonsterId = null; activeMonsterTarget = null; run(); });
+    type.addEventListener('change', () => { searchPage = 0; searchMonsterId = null; activeMonsterTarget = null; run(); });
     run();
   }
   function render() {
@@ -563,7 +588,7 @@ export function installLastroWorldMap(component, deps, regions, makeIndex) {
     regions.forEach((region, i) => { const option = node('option', region.name); option.value = String(i); regionSelect.append(option); });
     regionSelect.addEventListener('change', () => { currentRegion = Number(regionSelect.value); drawRegion(); canvas.scrollTop = canvas.scrollLeft = 0; });
     root.querySelector('.wm-search').addEventListener('click', () => open({ kind: 'search' }));
-    root.querySelector('.wm-close').addEventListener('click', hide);
+    root.querySelector('.wm-close').addEventListener('click', closeWorldMap);
     root.querySelector('.wm-back').addEventListener('click', () => { if (fromSearch) open({ kind: 'search' }); else { drawRegion(); closePanel(); } });
     // Native inputs must not propagate keyboard shortcuts to the live game.
     root.addEventListener('keydown', event => {
@@ -576,7 +601,13 @@ export function installLastroWorldMap(component, deps, regions, makeIndex) {
   component.onAppend = function () { alive = true; this._host.style.display = 'none'; window.addEventListener('resize', fitViewport); };
   component.toggle = function () {
     if (visible()) { hide(); return; }
-    showWindow(); root.querySelector('.wm-search').focus({ preventScroll: true });
+    showWindow();
+    if (resumeView) {
+      const saved = resumeView; resumeView = null;
+      open(saved.route, undefined, saved.monsterTarget, saved);
+      return;
+    }
+    root.querySelector('.wm-search').focus({ preventScroll: true });
     const ticket = ++generation;
     notice('正在读取地图资料…');
     ensureData().then(() => { if (alive && ticket === generation) { message.hidden = true; drawRegion(); } }).catch(() => {
@@ -584,7 +615,16 @@ export function installLastroWorldMap(component, deps, regions, makeIndex) {
       notice('地图资料加载失败。'); message.append(button('重试', () => { this._host.style.display = 'none'; this.toggle(); }));
     });
   };
-  component.onRemove = function () { deps.cancelTeleport?.(); alive = false; generation++; closeItem(false); route = null; fromSearch = false; body?.replaceChildren(); window.removeEventListener('resize', fitViewport); };
+  component.onRemove = function () {
+    // Map teardown (including same-map random teleports) keeps the loaded GUI.
+    // Save query context before disposing its DOM, and never leave a blank overlay.
+    if (root) rememberView();
+    deps.cancelTeleport?.(); alive = false; generation++; closeItem(false);
+    route = null; fromSearch = false; activeMonsterTarget = null; body?.replaceChildren();
+    if (panel) panel.hidden = true;
+    if (message) message.hidden = true;
+    window.removeEventListener('resize', fitViewport);
+  };
   component.onResize = function () { fitViewport(); placeItem(); };
   component.updatePartyMembers = function (packet) {
     partyMaps = new Set((packet.groupInfo || []).filter(member => member.state === 0 && member.AID !== deps.accountId?.()).map(member => String(member.mapName || '').replace(/\.gat$/i, '')));

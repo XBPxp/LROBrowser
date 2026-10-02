@@ -12,6 +12,7 @@ import { installLastroToolsPanels } from './lastro-tools-panels.mjs';
 import { LASTRO_TOOLS_CSS } from './lastro-tools-style.mjs';
 import { captureLastroShortcutEntry, installLastroShortcutEntry } from './lastro-shortcut-entry.mjs';
 import { installLastroShortcutSettings } from './lastro-shortcut-settings.mjs';
+import { installLastroTeleportSettings } from './lastro-teleport-settings.mjs';
 import { normalizeRouteEntry } from '../vendor/v2/lastro-v1-migration.mjs';
 import presets from './lastro-teleport-routes.json' with { type: 'json' };
 
@@ -262,6 +263,9 @@ function loadPreferences() {
   preferences.save = function () { localStorage.setItem(preferenceKey, JSON.stringify(this)); recordState('已保存本地预览设置。'); };
   return preferences;
 }
+const teleportConfirmationPreferenceKey = 'lastro-tools-preview-teleport-confirmation';
+let teleportConfirmationEnabled = true;
+try { teleportConfirmationEnabled = JSON.parse(localStorage.getItem(teleportConfirmationPreferenceKey) || 'null')?.enabled !== false; } catch { /* Confirm by default. */ }
 const nativeShortcutEntry = captureLastroShortcutEntry(tools);
 panels = installLastroToolsPanels(tools, {
   document, window, GUIComponent, UIManager,
@@ -269,6 +273,7 @@ panels = installLastroToolsPanels(tools, {
   normalizeRoute: normalizeRouteEntry,
   requestRoute: route => { requests.push({ npc: route.npc, outset: route.outset, path: route.path }); recordState('已模拟前往：' + route.npc); return route.breakpoint ? 'navigation' : 'teleport'; },
   showPrompt: (message, yes, no) => UIManager.showPromptBox(message, 'ok', 'cancel', yes, no),
+  shouldConfirmTeleport: () => teleportConfirmationEnabled,
   getProfile: () => 5, getPresetRoutes: () => routes, loadPreferences,
   getCurrentLocation: () => ({ map: 'prontera', x: 156, y: 182 }),
 }, toolsCss, routes);
@@ -306,6 +311,16 @@ installLastroShortcutSettings(graphics, {
   onError: error => recordState(error.message),
 });
 components.set(graphics.name, graphics);
+installLastroTeleportSettings(graphics, {
+  document, getEnabled: () => teleportConfirmationEnabled,
+  setEnabled: enabled => {
+    localStorage.setItem(teleportConfirmationPreferenceKey, JSON.stringify({ enabled }));
+    teleportConfirmationEnabled = enabled;
+    recordState(enabled ? '传送确认已开启。' : '传送确认已关闭。');
+    return true;
+  },
+  onError: error => recordState(error.message),
+});
 const ordinaryWindow = new GUIComponent('PreviewOrdinaryWindow', toolsCss + '\n:host{width:280px}.preview-window-body{box-sizing:border-box;height:135px;padding:12px;color:#263854;font-size:13px}');
 components.set(ordinaryWindow.name, ordinaryWindow);
 ordinaryWindow.render = () => '<div class="lastro-tools"><div class="lastro-ro-titlebar" data-background="basic_interface/titlebar_mid.bmp"><span class="lastro-title-left" data-background="basic_interface/titlebar_left.bmp"></span><span class="lastro-title-right" data-background="basic_interface/titlebar_right.bmp"></span><strong>普通窗口遮挡示例</strong><button type="button" class="lastro-window-close" data-background="basic_interface/sys_close_off.bmp" data-hover="basic_interface/sys_close_on.bmp" aria-label="关闭遮挡示例" title="关闭"></button></div><div class="preview-window-body">本窗口位于普通窗口层级，可以遮挡底部入口图标。<p>关闭后可继续使用入口。</p></div></div>';
@@ -372,7 +387,7 @@ const previewJs = [
   functions.activateLastROSettingsTab, functions.showLastROSettingsView, functions.showLastROMainView,
   functions._popupPosition, functions._createButton,
   'const UIManager = { addComponent: component => { components.set(component.name, component); return component; }, getComponent: name => components.get(name), ' + promptMethod + ' };',
-  'const toolsInit = ' + toolsInit + ';', installLastroToolsPanels.toString(), captureLastroShortcutEntry.toString(), installLastroShortcutEntry.toString(), installLastroShortcutSettings.toString(), setupSource,
+  'const toolsInit = ' + toolsInit + ';', installLastroToolsPanels.toString(), captureLastroShortcutEntry.toString(), installLastroShortcutEntry.toString(), installLastroShortcutSettings.toString(), installLastroTeleportSettings.toString(), setupSource,
 ].join('\n');
 await writeFile('generated/tools-panels-preview.js', previewJs);
 await writeFile('generated/tools-panels-preview.html', `<!doctype html><html lang="zh-CN"><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>LASTRO 挂机与传送窗口预览</title>
