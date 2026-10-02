@@ -52,9 +52,25 @@ describe('activity link same-map helper', () => {
   });
 });
 
-function runtimeFixture(dataMap = 'force_map3#100#184') {
+function loadRuntimeFixtureCode() {
   const runtime = readFileSync('generated/runtime/Online.js', 'utf8');
-  const file = ts.createSourceFile('Online.js', runtime, ts.ScriptTarget.Latest, true, ts.ScriptKind.JS);
+  const prefixEnd = runtime.indexOf('//#region');
+  if (prefixEnd < 0) throw new Error('Missing final generated runtime prefix');
+  const region = (path: string) => {
+    const marker = '//#region ' + path, start = runtime.indexOf(marker);
+    if (start < 0 || runtime.indexOf(marker, start + marker.length) >= 0) throw new Error('Missing/ambiguous final runtime region: ' + path);
+    const end = runtime.indexOf('//#endregion', start);
+    if (end < start) throw new Error('Unterminated final runtime region: ' + path);
+    return runtime.slice(start, end);
+  };
+  // Inspect only the real adapter and its dependencies, once. Cache source text,
+  // not a full bundle AST or the mutable state belonging to each test instance.
+  const source = [runtime.slice(0, prefixEnd),
+    region('src/UI/Components/Navigation/MapPathFinder.js'),
+    region('src/UI/Components/Navigation/Navigation.js'),
+    region('src/UI/Components/LastROTools/LastROTools.js'),
+  ].join('\n');
+  const file = ts.createSourceFile('activity-fixture.js', source, ts.ScriptTarget.Latest, true, ts.ScriptKind.JS);
   let factory: ts.CallExpression | undefined;
   const functions = new Map<string, string>(), navigation: string[] = [];
   function visit(node: ts.Node) {
@@ -64,9 +80,14 @@ function runtimeFixture(dataMap = 'force_map3#100#184') {
     ts.forEachChild(node, visit);
   }
   visit(file);
-  if (!factory || !functions.has('normalizeLastROTeleportMap') || navigation.length !== 5) throw new Error('Missing final generated same-map fixture');
+  if (!factory || !functions.has('normalizeLastROTeleportMap') || !functions.has('normalizeMapName') || navigation.length !== 5) throw new Error('Missing final generated same-map fixture');
   const argument = factory.arguments[0];
   if (!argument || !ts.isObjectLiteralExpression(argument) || !argument.properties.some(node => node.name?.getText(file) === 'navigate')) throw new Error('Generated activity navigation adapter is not ready');
+  return `${[...functions.values()].join('\n')}\n${navigation.join('\n')}\nconst adapters=${argument.getText(file)}; const links=${factory.expression.getText(file)}(adapters); ({links,adapters});`;
+}
+const runtimeFixtureCode = loadRuntimeFixtureCode();
+
+function runtimeFixture(dataMap = 'force_map3#100#184') {
   const root = document.createElement('div'); root.innerHTML = '<input class="services-toggle" type="checkbox">'; document.body.append(root);
   const calls: string[] = [], postMessage = vi.fn(() => calls.push('path')), send = vi.fn(), notice = vi.fn(), warn = vi.fn();
   const map = { currentMap: 'force_map3.gat', loading: false };
@@ -90,7 +111,7 @@ function runtimeFixture(dataMap = 'force_map3#100#184') {
     PACKET: { CZ: { PRIVATE_AIRSHIP_REQUEST: class {} } }, Network: { sendPacket: send },
     buildPrivateAirshipRequest: (value: object) => ({ ...value, itemid: 14527 }),
   });
-  const result = vm.runInContext(`${[...functions.values()].join('\n')}\n${navigation.join('\n')}\nconst adapters=${argument.getText(file)}; const links=${factory.expression.getText(file)}(adapters); ({links,adapters});`, context) as {
+  const result = vm.runInContext(runtimeFixtureCode, context) as {
     links: ReturnType<typeof createLastroChatMapLinks>; adapters: { getMap(): string; canTeleport(): boolean; navigate(target: { mapname: string; x: number; y: number }): void } };
   const parent = document.createElement('div'); result.links.render(parent, `[活动] <span class="mapname" data-map="${dataMap}">点击前往</span>`); document.body.append(parent);
   return { ...result, link: parent.querySelector('a')!, map, session, altitude, nav, context, calls, postMessage, send, notice, cancelRoute, prompts };
