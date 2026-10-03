@@ -1,5 +1,20 @@
 import ts from 'typescript';
 
+/* global SessionStorage_default, KEYS, Controls_default, Mouse */
+
+function lastroCanPassPlayerClick(entity) {
+  return SessionStorage_default.FreezeUI === false
+    && Mouse.state === Mouse.MOUSE_STATE.NORMAL
+    && SessionStorage_default.captchaGetIdOnEntityClick === false
+    && SessionStorage_default.captchaGetIdOnFloorClick === false
+    && SessionStorage_default.TouchTargeting === false
+    && SessionStorage_default.mapState?.isPVP === false
+    && SessionStorage_default.mapState?.isGVG === false
+    && KEYS.SHIFT === false && KEYS.CTRL === false && KEYS.ALT === false
+    && Controls_default.noshift === false
+    && typeof entity.canAttackEntity === 'function' && entity.canAttackEntity() === false;
+}
+
 // All callbacks are explicit because this factory is serialized into MapEngine.
 export function createLastroMovementInput({ getTarget, getContext, canMove, sendMove, onManualMove,
   onError, clock = globalThis, now = () => globalThis.performance.now() }) {
@@ -167,10 +182,47 @@ export function patchRuntimeMovementInput(source) {
 }` });
     edits.push({ start: stop.body.getStart(file), end: stop.body.end, text: '{ MapControl._lastroMovementInput?.stop(); }' });
     edits.push({ start: interval.parameters.pos, text: 'target' });
-    const sendText = send.thenStatement.getText(file).replace(/Mouse\.world\.x/g, 'target.x').replace(/Mouse\.world\.y/g, 'target.y')
-      .replace(/if \(!checkFreeCell\(target\.x, target\.y, 9, pkt\.dest\)\) \{\s*pkt\.dest\[0\] = target\.x;\s*pkt\.dest\[1\] = target\.y;\s*\}/,
-        'if (!checkFreeCell(target.x, target.y, 9, pkt.dest)) return false;');
-    if (sendText.includes('pkt.dest[0] = target.x')) fail();
+    const sendBody = send.thenStatement.getText(file).replace(/Mouse\.world\.x/g, 'target.x').replace(/Mouse\.world\.y/g, 'target.y');
+    const fallback = /if \(!checkFreeCell\(target\.x, target\.y, 9, pkt\.dest\)\) \{\s*pkt\.dest\[0\] = target\.x;\s*pkt\.dest\[1\] = target\.y;\s*\}/g;
+    if (sendBody.match(fallback)?.length !== 1) fail();
+    // Occupancy prefers an empty cell; it must not reject walkable crowded ground.
+    const sendText = sendBody.replace(fallback, `if (!checkFreeCell(target.x, target.y, 9, pkt.dest)) {
+      if (!(Altitude.getCellType(target.x, target.y) & Altitude.TYPE.WALKABLE)) return false;
+      pkt.dest[0] = target.x;
+      pkt.dest[1] = target.y;
+    }`);
+    const freeCell = fn('checkFreeCell'), cell = fn('isFreeCell');
+    const occupancy = 'entity.objecttype != entity.constructor.TYPE_EFFECT && entity.objecttype != entity.constructor.TYPE_UNIT && entity.objecttype != entity.constructor.TYPE_TRAP && Math.round(entity.position[0]) === x && Math.round(entity.position[1]) === y';
+    const checks = find(node => ts.isIfStatement(node) && node.expression.getText(file).replace(/\s/g, '') === occupancy.replace(/\s/g, ''));
+    const candidate = find(node => ts.isCallExpression(node) && node.expression.getText(file) === 'isFreeCell');
+    const loops = freeCell.body.statements.filter(ts.isForStatement);
+    const walkable = cell.body.statements[0];
+    if (freeCell.parameters.map(node => node.name.getText(file)).join(',') !== 'x,y,range,out'
+      || cell.parameters.map(node => node.name.getText(file)).join(',') !== 'x,y'
+      || checks.length !== 1 || candidate.length !== 1 || loops.length !== 1
+      || candidate[0].getText(file) !== 'isFreeCell(x + _x * d_x, y + _y * d_y)'
+      || !walkable || !ts.isIfStatement(walkable)
+      || walkable.getText(file).replace(/\s/g, '') !== 'if(!(Altitude.getCellType(x,y)&Altitude.TYPE.WALKABLE))returnfalse;') fail();
+    // Keep native cell order and exclusions, but scan the crowd only once per request.
+    edits.push({ start: loops[0].getStart(file), text: 'const occupied = { cells: null };\n  ' });
+    edits.push({ start: candidate[0].arguments.end, text: ', occupied' });
+    edits.push({ start: cell.parameters.end, text: ', occupied' });
+    edits.push({ start: cell.body.getStart(file), end: cell.body.end, text: `{
+  ${walkable.getText(file)}
+  if (!occupied.cells) {
+    const cells = new Set();
+    EntityManager.forEach(function (entity) {
+      if (entity.objecttype != entity.constructor.TYPE_EFFECT
+        && entity.objecttype != entity.constructor.TYPE_UNIT
+        && entity.objecttype != entity.constructor.TYPE_TRAP) {
+        cells.add(Math.round(entity.position[0]) + "," + Math.round(entity.position[1]));
+      }
+      return true;
+    });
+    occupied.cells = cells;
+  }
+  return !occupied.cells.has(x + "," + y);
+}` });
     edits.push({ start: interval.body.getStart(file), end: interval.body.end, text: `{
   const position = SessionStorage_default.Entity.position;
   if (Math.round(position[0]) === target.x && Math.round(position[1]) === target.y) return false;
@@ -179,7 +231,7 @@ export function patchRuntimeMovementInput(source) {
 }` });
     edits.push({ start: binds[0].parent.getStart(file), text: `// lastro-movement-input-installed
         MapControl._lastroMovementInput = (${createLastroMovementInput.toString()})({
-          clock: Events, now: () => globalThis.performance.now(),
+          clock: globalThis, now: () => globalThis.performance.now(),
           getTarget: () => ({ x: Mouse.world.x, y: Mouse.world.y }),
           getContext: () => ({ map: MapRenderer.loading ? "" : MapRenderer.currentMap, player: SessionStorage_default.Entity }),
           canMove: (target, phase) => {
@@ -226,6 +278,45 @@ export function patchRuntimeMovementInput(source) {
     edits.push({ start: init[0].body.getStart(file) + 1, text: `
       window.addEventListener("blur", () => MapControl._lastroMovementInput?.cancel());
       document.addEventListener("visibilitychange", () => { if (document.hidden) MapControl._lastroMovementInput?.cancel(); });` });
+  });
+  source = patchRegion(source, 'src/Controls/EntityControl.js', ({ file, edits, find }) => {
+    if (file.parseDiagnostics.length) fail();
+    const classes = find(node => ts.isClassExpression(node)
+      && ts.isBinaryExpression(node.parent) && node.parent.left.getText(file) === 'EntityControl');
+    if (classes.length !== 1) fail();
+    const method = name => {
+      const matches = classes[0].members.filter(node => ts.isMethodDeclaration(node)
+        && node.name.getText(file) === name);
+      if (matches.length !== 1 || !matches[0].body || matches[0].parameters.length
+        || !matches[0].modifiers?.some(node => node.kind === ts.SyntaxKind.StaticKeyword)) fail();
+      return matches[0];
+    };
+    const down = method('onMouseDown'), focus = method('onFocus');
+    const branch = (owner, name) => {
+      const switches = owner.body.statements.filter(ts.isSwitchStatement);
+      if (switches.length !== 1 || switches[0].expression.getText(file) !== 'this.objecttype') fail();
+      const matches = switches[0].caseBlock.clauses.filter(node => ts.isCaseClause(node)
+        && node.expression.getText(file) === 'Entity.' + name);
+      if (matches.length !== 1) fail();
+      return matches[0];
+    };
+    const pc = branch(down, 'TYPE_PC'), focusPC = branch(focus, 'TYPE_PC');
+    const element = branch(focus, 'TYPE_ELEM'), hom = branch(focus, 'TYPE_HOM');
+    const captcha = pc.statements[0], stop = pc.statements[1];
+    const expected = 'if(SessionStorage_default.captchaGetIdOnEntityClick)CaptchaSelector_default.addPlayer(this.GID);';
+    const nativeFocus = 'if(KEYS.SHIFT===false&&Controls_default.noshift===false&&!this.canAttackEntity()){if(!Camera.action.active)Cursor.setType(Cursor.ACTION.DEFAULT);if(!SessionStorage_default.TouchTargeting&&!SessionStorage_default.autoFollow)break;}';
+    if (down.body.statements[0]?.getText(file).replace(/\s/g, '') !== 'constEntity=this.constructor;'
+      || pc.statements.length !== 2 || !captcha || !ts.isIfStatement(captcha)
+      || captcha.getText(file).replace(/\s/g, '') !== expected
+      || !stop || !ts.isReturnStatement(stop) || stop.expression?.kind !== ts.SyntaxKind.TrueKeyword
+      || focusPC.statements.length || element.statements.length
+      || hom.statements[0]?.getText(file).replace(/\s/g, '') !== nativeFocus) fail();
+    method('canAttackEntity');
+    const eol = file.text.includes('\r\n') ? '\r\n' : '\n';
+    edits.push({ start: file.text.indexOf('\n') + 1,
+      text: ('// lastro-movement-input-installed\n' + lastroCanPassPlayerClick.toString() + '\n').replace(/\n/g, eol) });
+    // Native onFocus can then let an ordinary noncombat click reach walking.
+    edits.push({ start: stop.getStart(file), text: 'if (lastroCanPassPlayerClick(this)) return false;' + eol + '          ' });
   });
   source = patchRegion(source, 'src/Renderer/MapRenderer.js', ({ edits, find }) => {
     const setMap = find(node => ts.isMethodDeclaration(node) && node.name.getText() === 'setMap');

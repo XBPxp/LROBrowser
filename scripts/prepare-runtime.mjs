@@ -1,10 +1,11 @@
-import { mkdir, rm } from 'node:fs/promises';
+import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath, URL } from 'node:url';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import process from 'node:process';
 import { importCoreAssets } from './import-core-assets.mjs';
+import { patchNavigationWorker } from './lastro-navigation-worker.mjs';
 
 const execFileAsync = promisify(execFile);
 const repo = fileURLToPath(new URL('../', import.meta.url));
@@ -31,6 +32,10 @@ await execFileAsync(process.execPath, [
 await execFileAsync(process.execPath, [
   path.join(repo, 'scripts/patch-resource-worker.mjs'), moduleRoot, runtimeRoot,
 ], { cwd: repo });
+
+await writeFile(path.join(runtimeRoot, 'PathFindingWorker.js'), patchNavigationWorker(
+  await readFile(path.join(moduleRoot, 'PathFindingWorker.js'), 'utf8'),
+));
 
 const manifest = await importCoreAssets({
   coreRoot,

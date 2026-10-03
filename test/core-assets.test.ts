@@ -1,5 +1,6 @@
 import { lstat, mkdir, mkdtemp, rm, symlink, writeFile } from 'node:fs/promises';
 import path from 'node:path';
+import { createHash } from 'node:crypto';
 import { describe, expect, it, afterEach } from 'vitest';
 import { importCoreAssets } from '../scripts/import-core-assets.mjs';
 import { readFile, readdir } from 'node:fs/promises';
@@ -30,6 +31,27 @@ async function fixture() {
 }
 
 describe('core executable asset importer', () => {
+  it('packages the prepared navigation worker and records its final integrity', async () => {
+    const f = await fixture();
+    const runtime = path.join(f.root, 'runtime');
+    await mkdir(runtime);
+    for (const name of ['Online.js', 'ThreadEventHandler.js', 'LastROThreadEventHandler.js', 'lastro-resource-loader.js']) {
+      await writeFile(path.join(runtime, name), 'export {};');
+    }
+    await writeFile(path.join(f.modules, 'PathFindingWorker.js'), 'const nativeNavigationQueue = true;');
+    const bytes = Buffer.from('const preparedNavigationQueue = true;\r\n');
+    await writeFile(path.join(runtime, 'PathFindingWorker.js'), bytes);
+    const options = { coreRoot: f.core, moduleRoot: f.modules, output: f.output, runtimePath: path.join(runtime, 'Online.js') };
+    const manifest = await importCoreAssets(options);
+    expect(await readFile(path.join(f.output, 'runtime/PathFindingWorker.js'))).toEqual(bytes);
+    expect(manifest.files.find(file => file.path === 'runtime/PathFindingWorker.js')).toEqual({
+      path: 'runtime/PathFindingWorker.js', kind: 'runtime', bytes: bytes.length,
+      sha256: createHash('sha256').update(bytes).digest('hex'),
+    });
+    await rm(path.join(runtime, 'PathFindingWorker.js'));
+    await expect(importCoreAssets(options)).rejects.toThrow(/ENOENT/);
+  });
+
   it('preserves core asset paths, imports bundled fonts, and produces sorted hashes', async () => {
     const f = await fixture();
     const first = await importCoreAssets({ coreRoot: f.core, moduleRoot: f.modules, output: f.output });

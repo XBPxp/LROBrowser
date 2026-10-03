@@ -1,4 +1,42 @@
 import ts from 'typescript';
+import { findLastroServerWalkPath } from './lastro-server-walk.mjs';
+
+// Project only the unrendered distance. Replacing a route must not replay its
+// historical catch-up distance in the walk animation or allocate another route.
+function lastroProjectWalkDistance(walk, tick) {
+  if (!walk || !Number.isFinite(tick) || !Number.isFinite(walk.dist) || !Number.isFinite(walk.speed)) return;
+  const path = walk.path, total = walk.total;
+  let index = walk.index;
+  if (!path || !Number.isInteger(index) || !Number.isInteger(total) || index % 2 || index < 2 || index >= total
+    || total % 2 || total > path.length) return;
+  let startX = walk.pos[0], startY = walk.pos[1];
+  let lastX = walk.lastPos[0], lastY = walk.lastPos[1];
+  let nextX = path[index], nextY = path[index + 1];
+  let dx = nextX - startX, dy = nextY - startY;
+  let duration = Math.sqrt(dx * dx + dy * dy);
+  duration = duration > 0 ? walk.speed * duration : walk.speed;
+  if (!duration || duration < 1) duration = 1;
+  let start = walk.tick || tick, end = start + duration;
+  let distance = 0;
+  while (index < total - 2 && tick >= end) {
+    dx = nextX - lastX; dy = nextY - lastY;
+    distance += Math.sqrt(dx * dx + dy * dy);
+    startX = lastX = nextX; startY = lastY = nextY;
+    index += 2;
+    nextX = path[index]; nextY = path[index + 1];
+    dx = nextX - startX; dy = nextY - startY;
+    duration = Math.sqrt(dx * dx + dy * dy);
+    duration = duration > 0 ? walk.speed * duration : walk.speed;
+    if (!duration || duration < 1) duration = 1;
+    start = end; end = start + duration;
+  }
+  const progress = Math.min(Math.max((tick - start) / Math.max(end - start, 1), 0), 1);
+  dx = startX + (nextX - startX) * progress - lastX;
+  dy = startY + (nextY - startY) * progress - lastY;
+  distance += Math.sqrt(dx * dx + dy * dy);
+  const projected = walk.dist + distance;
+  return Number.isFinite(projected) ? projected : undefined;
+}
 
 function replaceExact(source, needle, replacement) {
   if (source.split(needle).length !== 2) throw new Error('anchor:entity-sync');
@@ -30,6 +68,12 @@ function patchRegion(source, name, patch) {
 
 export function patchRuntimeEntitySync(source) {
   source = patchRegion(source, 'src/Renderer/Entity/EntityWalk.js', body => {
+    // Paths include the starting cell followed by up to MAX_WALKPATH steps.
+    for (const [name, parameters] of [['WalkStructure', ''], ['resetRoute', 'keepDistance']]) {
+      body(name, parameters, original => replaceExact(original,
+        'new Int16Array(PathFinding_default.MAX_WALKPATH * 2)',
+        'new Int16Array((PathFinding_default.MAX_WALKPATH + 1) * 2)'));
+    }
     body('computeWalkStartTick', 'nowTick,moveStartTime,pathDuration,maxClamp', original => {
       // Reject a changed native clock contract rather than patching a different helper.
       replaceExact(original, 'let elapsed = SessionStorage_default.serverTick - moveStartTime;', '');
@@ -69,12 +113,24 @@ export function patchRuntimeEntitySync(source) {
     this.walk.pos.set(this.position);`);
       output = replaceExact(output, 'this.walk.tick = this.walk.prevTick = nowTick;', `const duration = estimatePathDuration(this.walk.path, this.walk.total, this.walk.speed, this.position);
     this.walk.tick = this.walk.prevTick = computeWalkStartTick(nowTick, moveStartTime, duration);`);
+      output = replaceExact(output, '  this.resetRoute(hadRoute);', `  const continuedDistance = serverMove && hadRoute && wasWalkingAction
+    ? lastroProjectWalkDistance(this.walk, Date.now()) : undefined;
+  this.resetRoute(hadRoute);`);
+      output = replaceExact(output, '  const total = PathFinding_default.search(', '  let total = PathFinding_default.search(');
+      output = replaceExact(output, '  this.walk.index = 2;', `  if (serverMove && (!total || total * 2 > path.length) && !range
+    && (typeof MapRenderer === "undefined" || !MapRenderer.loading)) {
+    total = findLastroServerWalkPath(from_x, from_y, to_x, to_y, path, Altitude);
+  }
+  // A declared route must fit the buffer before interpolation reads it.
+  if (total * 2 > path.length) total = 0;
+  this.walk.index = 2;`);
       output = replaceExact(output, `        play: true,
       });
   }
 }`, `        play: true,
       });
     if (serverMove) this.walkProcess();
+    if (serverMove && this.walk.total > 0 && Number.isFinite(continuedDistance)) this.walk.dist = continuedDistance;
   }
 }`);
       return output;
@@ -87,6 +143,9 @@ export function patchRuntimeEntitySync(source) {
       return original.slice(0, start) + '  const TICK = Date.now();\n' + original.slice(end);
     });
   });
+  const marker = '//#region src/Renderer/Entity/EntityWalk.js';
+  if (source.includes(marker)) source = source.replace(marker, marker + '\n'
+    + findLastroServerWalkPath.toString() + '\n' + lastroProjectWalkDistance.toString());
   return patchRegion(source, 'src/Engine/MapEngine/Entity.js', body => {
     body('onEntityVanish', 'pkt', original => {
       const start = original.indexOf('    const deathDelay =');

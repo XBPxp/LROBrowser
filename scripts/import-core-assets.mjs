@@ -112,7 +112,7 @@ export async function importCoreAssets({ coreRoot, moduleRoot, runtimePath, outp
   for (const relative of await filesUnder(modules)) {
     if (relative === 'Online.js' || relative === 'lastro-navigation-debug.mjs'
       || !/\.(?:[cm]?js)$/i.test(relative) || /\.test\.mjs$/i.test(relative)) continue;
-    const patchedWorker = runtimePath && ['ThreadEventHandler.js', 'LastROThreadEventHandler.js'].includes(relative);
+    const patchedWorker = runtimePath && ['ThreadEventHandler.js', 'LastROThreadEventHandler.js', 'PathFindingWorker.js'].includes(relative);
     const inputRoot = patchedWorker ? path.dirname(runtimePath) : modules;
     await addFile(entries, destinations, path.join(inputRoot, relative), `runtime/${path.basename(relative)}`, 'runtime', destinationRoot);
   }

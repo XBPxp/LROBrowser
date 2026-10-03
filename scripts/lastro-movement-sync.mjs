@@ -1,6 +1,6 @@
 import ts from 'typescript';
 
-/* global SessionStorage_default, Altitude, MapControl, _socket, LastROAdvanceServerTick */
+/* global SessionStorage_default, MapControl, _socket, LastROAdvanceServerTick */
 
 function lastroCancelMovement(entity, invalidate = true) {
   if (!entity) return;
@@ -66,20 +66,6 @@ function lastroHitStartTick(packet) {
   return elapsed >= 0 && elapsed <= 5000 ? now - elapsed : now;
 }
 
-function lastroStopAtHit(entity, route, tick) {
-  const previous = entity._lastroHitStop;
-  const epoch = entity._lastroMovementEpoch || 0;
-  if (route && !(previous?.epoch === epoch && previous.tick <= tick)) {
-    route.walkProcess(tick);
-    // The server stops at the nearer path cell after an interrupting hit.
-    entity.position[0] = Math.round(route.position[0]);
-    entity.position[1] = Math.round(route.position[1]);
-    entity.position[2] = Altitude.getCellHeight(entity.position[0], entity.position[1]);
-  }
-  lastroCancelMovement(entity, false);
-  if (!previous || previous.epoch !== epoch || tick < previous.tick) entity._lastroHitStop = { epoch, tick };
-}
-
 function replaceExact(source, needle, text) {
   if (source.split(needle).length !== 2) throw new Error('anchor:movement-sync');
   return source.replace(needle, text);
@@ -129,7 +115,7 @@ export function patchRuntimeMovementSync(source) {
       const patchedClock = '  const TICK = Date.now();';
       if (output.includes(patchedClock)) output = replaceExact(output, patchedClock, '  const TICK = Number.isFinite(lastroTick) ? lastroTick : Date.now();');
       else output = replaceExact(output, '  const wallTick = Date.now();', '  const wallTick = Number.isFinite(lastroTick) ? lastroTick : Date.now();');
-      return replaceExact(output, '    this.action !== this.ACTION.SIT &&', '    this.action !== this.ACTION.HURT &&\n    this.action !== this.ACTION.SIT &&');
+      return output;
     });
     const walkProcess = file.statements.find(node => ts.isFunctionDeclaration(node) && node.name?.text === 'walkProcess');
     edits.push({ start: walkProcess.parameters.pos, end: walkProcess.parameters.end, text: 'lastroTick' });
@@ -140,35 +126,59 @@ export function patchRuntimeMovementSync(source) {
       output = replaceExact(output, '    const count = pkt.count || 1;', `    const count = pkt.count || 1;
     const epoch = dstEntity._lastroMovementEpoch || 0;
     const self = dstEntity === SessionStorage_default.Entity;
-    // A subsequent speed update invalidates the old constant-speed history.
-    // Use the current native checkpoint rather than simulate with stale speed.
+    // A speed change makes the old route sample unsafe for rejecting a hit
+    // that predates the currently approved movement.
     const saved = dstEntity._lastroApprovedRoute;
     const approved = dstEntity._lastroApprovedEpoch === epoch && saved?.walk.speed === dstEntity.walk?.speed ? saved : null;
-    const route = lastroCaptureHitRoute(approved || dstEntity);
     const hitStart = lastroHitStartTick(pkt);
-    if (approved && hitStart + pkt.attackMT < approved.walk.tick) return;
-    let stopped = false;`);
+    if (approved && hitStart + pkt.attackMT < approved.walk.tick) return;`);
       output = replaceExact(output, '    function impendingAttack() {\n      if (dstEntity.action !== dstEntity.ACTION.DIE)', `    function impendingAttack() {
       if (EntityManager.get(dstEntity.GID) !== dstEntity || (self && dstEntity !== SessionStorage_default.Entity) || (dstEntity._lastroMovementEpoch || 0) !== epoch || dstEntity.action === dstEntity.ACTION.DIE) return;
-      if (!stopped) {
-        lastroStopAtHit(dstEntity, route, hitStart + pkt.attackMT);
-        stopped = true;
-      }
       if (dstEntity.action !== dstEntity.ACTION.DIE)`);
-      const resumeStart = output.indexOf('    function resumeWalk() {'), resumeEnd = output.indexOf('    for (let i = 0; i < count; i++) {', resumeStart);
-      if (resumeStart < 0 || resumeEnd < 0 || !output.slice(resumeStart, resumeEnd).includes('dstEntity.walk.index < dstEntity.walk.total')) throw new Error('anchor:movement-sync:resume');
-      output = output.slice(0, resumeStart) + output.slice(resumeEnd);
+      output = replaceExact(output, '    function resumeWalk() {', `    function resumeWalk() {
+      if (EntityManager.get(dstEntity.GID) !== dstEntity || (self && dstEntity !== SessionStorage_default.Entity) || (dstEntity._lastroMovementEpoch || 0) !== epoch || dstEntity.action === dstEntity.ACTION.DIE) return;`);
       output = replaceExact(output, 'pkt.attackMT + C_MULTIHIT_DELAY * i', 'Math.max(0, hitStart + pkt.attackMT + C_MULTIHIT_DELAY * i - Date.now())');
       output = replaceExact(output, 'pkt.attackMT + C_MULTIHIT_DELAY * 1.75 * i', 'Math.max(0, hitStart + pkt.attackMT + C_MULTIHIT_DELAY * 1.75 * i - Date.now())');
-      const timerStart = output.indexOf('    Events.setTimeout(\n      resumeWalk,');
-      if (timerStart < 0 || !output.slice(timerStart).includes('pkt.attackedMT,\n    );')) throw new Error('anchor:movement-sync:resume-timer');
-      return output.slice(0, timerStart) + '  }\n}';
+      return replaceExact(output, `      pkt.attackMT +
+        C_MULTIHIT_DELAY * (pkt.leftDamage ? 1.75 : 1) * (count - 1) +
+        pkt.attackedMT,`, '      Math.max(0, hitStart + lastHitDelay + pkt.attackedMT - Date.now()),');
     });
     for (const name of ['onEntityStopMove', 'onEntityJump']) {
       body(name, 'pkt', original => replaceExact(original, '  if (entity) {', '  if (entity) {\n    lastroCancelMovement(entity);'));
     }
-    body('onEntityFastMove', 'pkt', original => replaceExact(original, '      entity.walk.speed = 10;', '      entity.walk._lastroNormalSpeed = speed;\n      entity.walk.speed = 10;\n      entity._lastroApprovedRoute = lastroCaptureHitRoute(entity);\n      entity._lastroApprovedEpoch = entity._lastroMovementEpoch;')
-      .replace('        entity.walk.speed = speed;', '        entity.walk.speed = speed;\n        delete entity.walk._lastroNormalSpeed;'));
+    body('onEntityFastMove', 'pkt', original => {
+      let output = replaceExact(original, '  if (entity) {', `  if (entity) {
+    const x = pkt.targetXpos, y = pkt.targetYpos;
+    if (MapRenderer.loading || !Number.isInteger(Altitude.width) || !Number.isInteger(Altitude.height)
+      || Altitude.width <= 0 || Altitude.height <= 0 || !Number.isInteger(x) || !Number.isInteger(y)
+      || x < 0 || y < 0 || x >= Altitude.width || y >= Altitude.height) return;
+    let height;
+    try {
+      if (!Number.isFinite(Altitude.getCellType(x, y))) return;
+      height = Altitude.getCellHeight(x, y);
+    } catch { return; }
+    if (!Number.isFinite(height)) return;
+    // FASTMOVE is an authoritative Body Relocation target. A missing walking
+    // route must not discard that target or install a speed override forever.
+    if ((entity.position[0] === x && entity.position[1] === y)
+      || !Number.isFinite(entity.position[0]) || !Number.isFinite(entity.position[1])) {
+      lastroCancelMovement(entity);
+      entity.position[0] = x; entity.position[1] = y; entity.position[2] = height;
+      return;
+    }`);
+      output = replaceExact(output, '    if (entity.walk.path.length) {', `    const walk = entity.walk;
+    if (Number.isInteger(walk.total) && walk.total >= 4 && walk.total % 2 === 0
+      && walk.total <= walk.path.length && walk.path[walk.total - 2] === x && walk.path[walk.total - 1] === y) {`);
+      output = replaceExact(output, '      entity.walk.speed = 10;', '      entity.walk._lastroNormalSpeed = speed;\n      entity.walk.speed = 10;\n      entity._lastroApprovedRoute = lastroCaptureHitRoute(entity);\n      entity._lastroApprovedEpoch = entity._lastroMovementEpoch;');
+      output = replaceExact(output, '        entity.walk.speed = speed;', '        entity.walk.speed = speed;\n        delete entity.walk._lastroNormalSpeed;');
+      return replaceExact(output, '      };\n    }\n  }\n}', `      };
+    } else {
+      lastroCancelMovement(entity);
+      entity.position[0] = x; entity.position[1] = y; entity.position[2] = height;
+    }
+  }
+}`);
+    });
     body('onEntityVanish', 'pkt', original => replaceExact(original, '  const entity = EntityManager.get(pkt.GID);', '  const entity = EntityManager.get(pkt.GID);\n  lastroCancelMovement(entity);'));
   });
   source = patchRegion(source, 'src/Engine/MapEngine.js', body => {
@@ -183,6 +193,6 @@ export function patchRuntimeMovementSync(source) {
   });
   // The heartbeat lambda is nested in MapEngine initialization.
   if (source.includes('SP.returned = false;')) source = replaceExact(source, 'SP.returned = false;', 'if (SP.returned || !Number.isFinite(SP._lastroUnansweredSince)) SP._lastroUnansweredSince = Date.now();\n                SP.returned = false;');
-  const helpers = [lastroCancelMovement, lastroMovementUnavailable, lastroCheckMovementConnection, lastroCaptureHitRoute, lastroHitStartTick, lastroStopAtHit].map(fn => fn.toString()).join('\n');
+  const helpers = [lastroCancelMovement, lastroMovementUnavailable, lastroCheckMovementConnection, lastroCaptureHitRoute, lastroHitStartTick].map(fn => fn.toString()).join('\n');
   return source.replace(walkMarker, walkMarker + '\n' + helpers);
 }
